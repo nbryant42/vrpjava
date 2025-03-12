@@ -71,7 +71,7 @@ class OjAlgoCVRPSolverTest {
     }
 
 
-    // 240-254ms w/ naive code; now 831 ms
+    // 240-254ms w/ naive code; was 831 ms w/ iterative deepening; now ~3s with B&B
     @Test
     void eil33_reduced() throws IOException {
         assertEquals(new Result(428.7145713, List.of(
@@ -87,6 +87,7 @@ class OjAlgoCVRPSolverTest {
     }
 
     // takes about 2.5s w/ naive code; 1.5s now
+    // trivial -- solves at the root node -- so, also 1.5s with B&B
     @Test
     @Disabled
     void eil33_reduced2() throws IOException {
@@ -96,7 +97,7 @@ class OjAlgoCVRPSolverTest {
                 doTestEil33(24));
     }
 
-    // more than 30s to run w/ naive code; 1.3s now.
+    // more than 30s to run w/ naive code; 1.3s now. Trivially solvable at root node in B&B.
     @Test
     @Disabled
     void eil33_reduced3() throws IOException {
