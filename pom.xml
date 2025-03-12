@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+    <relativePath/> <!-- lookup parent from repository -->
+  </parent>
+  <groupId>org.example</groupId>
+  <artifactId>vrpjava</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+
+  <name>vrpjava</name>
+  <description>Exact/approximate VRP solver in pure Java</description>
+  <url>http://www.example.org</url>
+
+  <licenses>
+    <license/>
+  </licenses>
+  <developers>
+    <developer/>
+  </developers>
+  <scm>
+    <connection/>
+    <developerConnection/>
+    <tag/>
+    <url/>
+  </scm>
+
+  <properties>
+    <java.version>21</java.version>
+    <frontend-src-dir>${project.basedir}/frontend</frontend-src-dir>
+  </properties>
+
+  <dependencies>
+    <!-- Runtime dependencies -->
+    <dependency>
+      <groupId>org.ojalgo</groupId>
+      <artifactId>ojalgo</artifactId>
+      <version>55.1.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>33.4.0-jre</version>
+    </dependency>
+
+    <!-- Test dependencies -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.lmores.tsplib</groupId>
+      <artifactId>tsplib</artifactId>
+      <version>0.0.3</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-json</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
