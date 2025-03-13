@@ -39,7 +39,7 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 /**
  * Solver for the Capacitated Vehicle Routing Problem (CVRP).
  * <p>
- * This is a depth-first, lazily bounded, branch-and-bound-and-cut exact algorithm based on:
+ * This is a lazily bounded, branch-and-bound-and-cut exact algorithm based on:
  *
  * <ul>
  *     <li>The ojAlgo solver (which has available interfaces to commercial solvers)</li>
@@ -59,6 +59,7 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 public class OjAlgoCVRPSolver extends CVRPSolver {
     private double bestFirstRatio = 0.85;
     private long bestFirstMillis = 30_000L;
+    private CVRPSolver heuristic = new NearestNeighborCVRPSolver();
 
     public record Cut(int minVehicles, Set<Integer> subset) {
         Cut(int size, Optimisation.Result result) {
@@ -219,9 +220,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var size = costMatrix.length;
         var start = System.currentTimeMillis();
         var deadline = start + timeout;
-        var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
+        var kickstarter = heuristic.solve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
+        var bestKnown = kickstarter.objective();
+        var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
+                deadline - System.currentTimeMillis());
 
-        System.out.println("Bounds init complete after " + (System.currentTimeMillis() - start) + "ms");
+        logHeuristicBounds(start, globalBounds.getResult().getValue(), bestKnown);
         countCuts(globalBounds);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
@@ -240,7 +244,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         for (Node node; deadline > System.currentTimeMillis() && (node = queue.poll()) != null; nodes++) {
             // double-check the parent node's bound before we go any further; the best-known solution may have
             // improved since it was queued.
-            if (incumbent != null && node.bound() >= incumbent.getValue()) {
+            if (node.bound() >= bestKnown) {
                 continue; // fathom the node
             }
             var nodeModel = globalBounds.getModel().copy(true, false);
@@ -250,8 +254,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             double ub = nodeResult.getValue();
 
             // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or FAILED due to timeout.
-            if (nodeResult.getState() != OPTIMAL ||
-                    incumbent != null && nodeResult.getValue() >= incumbent.getValue()) {
+            if (nodeResult.getState() != OPTIMAL || nodeResult.getValue() >= bestKnown) {
                 continue; // fathom the node
             }
 
@@ -275,7 +278,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 // queue the closest gap last, so it's on top of stack (if it's a LIFO queue)
                 queueNode(node, ub, k, other, gap, queue);
                 queueNode(node, ub, k, closest, gap, queue);
-            } else if (incumbent == null || ub < incumbent.getValue()) {
+            } else if (ub < bestKnown) {
                 double lb = globalBounds.getResult().getValue();
                 double ratio = lb / ub;
                 var elapsed = System.currentTimeMillis() - start;
@@ -292,6 +295,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                         BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
 
                 incumbent = nodeResult;
+                bestKnown = ub;
 
                 if (ub <= lb) {
                     break;
@@ -299,12 +303,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             }
         }
 
-        if (incumbent == null) {
-            System.out.println(nodes + " nodes, no solution.");
-            return null;
-        }
-
-        var cycles = findCycles(size, incumbent);
+        var cycles = incumbent == null ? kickstarter.cycles() : findCycles(size, incumbent);
 
         System.out.println(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
         var cycleDemands = cycles.stream()
@@ -313,7 +312,14 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         System.out.println("Cycle demands: " + cycleDemands);
         countCuts(globalBounds);
 
-        return new Result(incumbent.getValue(), cycles);
+        return new Result(bestKnown, cycles);
+    }
+
+    private static void logHeuristicBounds(long start, double lb, double ub) {
+        System.out.println("[" + toSeconds(System.currentTimeMillis() - start) +
+                "s]: Bounds init complete. Bounds from heuristic: " +
+                (float) lb + '/' + (float) ub + " (" +
+                BigDecimal.valueOf((lb / ub) * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
     }
 
     private static BigDecimal toSeconds(long val) {
@@ -837,5 +843,15 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     @SuppressWarnings("unused")
     public void setBestFirstMillis(long bestFirstMillis) {
         this.bestFirstMillis = bestFirstMillis;
+    }
+
+    @SuppressWarnings("unused")
+    public CVRPSolver getHeuristic() {
+        return heuristic;
+    }
+
+    @SuppressWarnings("unused")
+    public void setHeuristic(CVRPSolver heuristic) {
+        this.heuristic = heuristic;
     }
 }

@@ -25,6 +25,7 @@ public abstract class CVRPSolver {
     public record Result(double objective, List<List<Integer>> cycles) {
     }
 
+    @SuppressWarnings("unused")
     public final Result solve(int minVehicles,
                               int maxVehicles,
                               BigDecimal vehicleCapacity,
@@ -54,7 +55,6 @@ public abstract class CVRPSolver {
         if (minVehicles > maxVehicles) {
             throw new IllegalArgumentException("maxVehicles must be at least " + minVehicles + ".");
         }
-        System.out.println("minVehicles = " + minVehicles);
         if (vehicleCapacity.signum() <= 0) {
             throw new IllegalArgumentException("vehicleCapacity must be positive.");
         }

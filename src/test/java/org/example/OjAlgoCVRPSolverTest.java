@@ -21,7 +21,6 @@ import static org.example.CVRPSolver.Result;
 import static org.example.OjAlgoCVRPSolver.base;
 import static org.example.Util.setUpHardware;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class OjAlgoCVRPSolverTest {
@@ -121,6 +120,18 @@ class OjAlgoCVRPSolverTest {
         }
     }
 
+    // tests rounding the cost matrix from eil33_moreVehicles to lesser precision to get an approximate solution
+    @Test
+    @Disabled
+    void eil33_moreVehicles_rounded() throws IOException {
+        var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
+
+        double v = 1674.9719;
+        if (r.objective() > v) {
+            fail("Objective > " + v);
+        }
+    }
+
     // slow, and doesn't always find the same bound.
     @Test
     @Disabled
@@ -131,7 +142,12 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     void timeout() throws IOException {
-        assertNull(doTestEil33(Integer.MAX_VALUE, 0L));
+        assertEquals(new Result(2875.8908523, List.of(
+                        List.of(0, 3, 4, 2, 12, 30, 31, 5, 11, 6),
+                        List.of(0, 7, 32, 1, 13, 8, 9, 10, 14),
+                        List.of(0, 15, 17, 29, 26, 18, 19, 25),
+                        List.of(0, 28, 27, 21, 22, 20, 24, 16, 23))),
+                doTestEil33(Integer.MAX_VALUE, 0L));
     }
 
 
