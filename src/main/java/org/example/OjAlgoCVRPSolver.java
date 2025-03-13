@@ -14,6 +14,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.PriorityQueue;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -86,6 +88,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
         Optimisation.Result getResult() {
             if (result == null) {
+                // TODO although the global lower bound CAN change during a run, it seems rare. Maybe drop this
+                // re-solve and just hold it constant?
                 result = minimize(model);
             }
             return result;
@@ -192,6 +196,14 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return result.withState(FAILED); // timed out.
     }
 
+    private record Node(double bound, BigDecimal gap, Map<Integer, BigDecimal> vars) implements Comparable<Node> {
+        @Override
+        public int compareTo(Node o) {
+            var b = Double.compare(bound, o.bound);
+            return b != 0 ? b : gap.compareTo(o.gap); // tie-break on the gap
+        }
+    }
+
     @Override
     protected Result doSolve(int minVehicles,
                              int maxVehicles,
@@ -207,25 +219,30 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         System.out.println("Bounds init complete after " + (System.currentTimeMillis() - start) + "ms");
         countCuts(globalBounds);
 
-        // stack of pending nodes for depth-first branch-and-bound search. Each node is simply represented as a Map
+        // queue of pending nodes for depth-first branch-and-bound search. Each node is simply represented as a Map
         // of variable IDs and values to be fixed in the model. All other needed information is taken from context.
-        var stack = new ArrayList<Map<Integer, BigDecimal>>();
+        var queue = new PriorityQueue<Node>(); // Collections.asLifoQueue(new ArrayDeque<Node>());
         var nodes = 0;
         Optimisation.Result incumbent = null;
 
         // the root node has no variables fixed.
-        stack.add(new HashMap<>());
+        queue.add(new Node(globalBounds.result.getValue(), ZERO, Map.of()));
 
-        for (; !stack.isEmpty() && deadline > System.currentTimeMillis(); nodes++) {
-            var node = stack.removeLast();
-
+        for (Node node; deadline > System.currentTimeMillis() && (node = queue.poll()) != null; nodes++) {
+            // double-check the parent node's bound before we go any further; the best-known solution may have
+            // improved since it was queued.
+            if (incumbent != null && node.bound() >= incumbent.getValue()) {
+                continue; // fathom the node
+            }
             var nodeModel = globalBounds.getModel().copy(true, false);
-            node.forEach((k, v) -> nodeModel.getVariable(k).level(v));
+            node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
             var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, size, globalBounds, deadline);
+            double ub = nodeResult.getValue();
 
             // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or FAILED due to timeout.
-            if (nodeResult.getState() != OPTIMAL || incumbent != null && nodeResult.getValue() >= incumbent.getValue()) {
+            if (nodeResult.getState() != OPTIMAL ||
+                    incumbent != null && nodeResult.getValue() >= incumbent.getValue()) {
                 continue; // fathom the node
             }
 
@@ -240,28 +257,26 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
             if (frac.isPresent()) {
                 var k = frac.get().getKey();
+                var gap = frac.get().getValue();
                 var v = nodeResult.get(k);
                 var closest = v.setScale(0, RoundingMode.HALF_EVEN);
                 var other = closest.compareTo(v) > 0 ? closest.subtract(ONE) : closest.add(ONE);
 
-                // push two child nodes with variable fixed to `closest` and `other`.
-                // push the closest gap last, so it's on top of stack.
-                pushNode(node, k, other, stack);
-                pushNode(node, k, closest, stack);
-            } else {
+                // queue two child nodes with variable fixed to `closest` and `other`.
+                // queue the closest gap last, so it's on top of stack (if it's a LIFO queue)
+                queueNode(node, ub, k, other, gap, queue);
+                queueNode(node, ub, k, closest, gap, queue);
+            } else if (incumbent == null || ub < incumbent.getValue()) {
                 double lb = globalBounds.getResult().getValue();
-                double ub = nodeResult.getValue();
 
-                if (incumbent == null || ub < incumbent.getValue()) {
-                    System.out.println("[" + elapsedSeconds(start) + "s]: New incumbent. Bounds now " +
-                            (float) lb + '/' + (float) ub + " (" +
-                            BigDecimal.valueOf(lb / ub * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
+                System.out.println("[" + elapsedSeconds(start) + "s]: New incumbent. Bounds now " +
+                        (float) lb + '/' + (float) ub + " (" +
+                        BigDecimal.valueOf(lb / ub * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
 
-                    incumbent = nodeResult;
+                incumbent = nodeResult;
 
-                    if (ub <= lb) {
-                        break;
-                    }
+                if (ub <= lb) {
+                    break;
                 }
             }
         }
@@ -293,10 +308,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         System.out.println("Currently " + count + " cuts.");
     }
 
-    private static void pushNode(Map<Integer, BigDecimal> node, Integer k, BigDecimal other, ArrayList<Map<Integer, BigDecimal>> stack) {
-        var node1 = new HashMap<>(node);
-        node1.put(k, other);
-        stack.add(node1);
+    private static void queueNode(Node parent, double ub, Integer k, BigDecimal v, BigDecimal gap, Queue<Node> queue) {
+        var childVars = new HashMap<>(parent.vars());
+        childVars.put(k, v);
+        queue.add(new Node(ub, gap, childVars));
     }
 
     // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.

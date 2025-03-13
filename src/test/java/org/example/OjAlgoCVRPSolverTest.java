@@ -22,6 +22,7 @@ import static org.example.OjAlgoCVRPSolver.base;
 import static org.example.Util.setUpHardware;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class OjAlgoCVRPSolverTest {
     @BeforeAll
@@ -108,6 +109,16 @@ class OjAlgoCVRPSolverTest {
     void eil33_boundsOnly() throws IOException {
         var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, 1000L * 60L * 60L);
         assertEquals(835.227782375, mr.getResult().getValue());
+    }
+
+    @Test
+    @Disabled
+    void eil33_moreVehicles() throws IOException {
+        var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
+        double v = 1660.0383; // best I've seen is 1574.385
+        if (v < r.objective()) {
+            fail("Objective > " + v);
+        }
     }
 
     // slow, and doesn't always find the same bound.
