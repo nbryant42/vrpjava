@@ -57,7 +57,7 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper.</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
-    private double bestFirstRatio = 0.85;
+    private double bestFirstRatio = 0.80;
     private long bestFirstMillis = 30_000L;
     private CVRPSolver heuristic = new NearestNeighborCVRPSolver();
 
@@ -220,7 +220,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var size = costMatrix.length;
         var start = System.currentTimeMillis();
         var deadline = start + timeout;
-        var kickstarter = heuristic.solve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
+        var kickstarter = heuristic.doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
         var bestKnown = kickstarter.objective();
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
                 deadline - System.currentTimeMillis());

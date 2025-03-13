@@ -120,18 +120,6 @@ class OjAlgoCVRPSolverTest {
         }
     }
 
-    // tests rounding the cost matrix from eil33_moreVehicles to lesser precision to get an approximate solution
-    @Test
-    @Disabled
-    void eil33_moreVehicles_rounded() throws IOException {
-        var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
-
-        double v = 1674.9719;
-        if (r.objective() > v) {
-            fail("Objective > " + v);
-        }
-    }
-
     // slow, and doesn't always find the same bound.
     @Test
     @Disabled
