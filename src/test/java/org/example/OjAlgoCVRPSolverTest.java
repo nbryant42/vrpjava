@@ -114,7 +114,19 @@ class OjAlgoCVRPSolverTest {
     @Disabled
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
-        double v = 1674.9719; // best I've seen is 1539.9554
+        // best I've seen from a <= 5 minute run is 1539.9554.
+        // I also saw some better results, but that took some time after hardcoding the lower bound.
+        // Best known (to me) solution is as follows, obtained on a Ryzen 9 3900X:
+        //
+        // [22.176s]: Bounds init complete. Bounds from heuristic: 1430.6775/1539.9556 (92.90%)
+        // Currently 200 cuts.
+        // [362.291s]: New incumbent. Bounds now 1430.6775/1539.1586 (92.95%)
+        // [530.284s]: New incumbent. Bounds now 1430.6775/1534.6448 (93.23%)
+        // 2851 nodes, 8 cycles: [[0, 1, 15, 17, 28, 16, 27], [0, 2, 10, 9, 8, 6, 5], [0, 3, 31, 14], [0, 4, 32, 11, 12], [0, 7, 22, 18], [0, 13, 19, 21, 20, 23, 24, 25], [0, 26], [0, 29, 30]]
+        // Cycle demands: [4000, 2770, 3700, 3950, 3950, 4000, 4000, 3000]
+        // Currently 1107 cuts.
+        // Total elapsed: 900130 ms
+        double v = 1674.9719;
         if (r.objective() > v) {
             fail("Objective > " + v);
         }
