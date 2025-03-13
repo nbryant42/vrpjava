@@ -9,8 +9,10 @@ import java.math.RoundingMode;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,13 +23,13 @@ import static com.google.common.collect.MoreCollectors.onlyElement;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
-import static java.util.Arrays.*;
 import static java.util.stream.Collectors.toSet;
 import static org.example.CutCandidates.round;
 import static org.example.SubtourCuts.formatCut;
 import static org.example.Util.isLowerTriangular;
 import static org.example.Util.newModel;
 import static org.example.Util.setTimeout;
+import static org.ojalgo.optimisation.Optimisation.State.FAILED;
 import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
 /**
@@ -69,15 +71,37 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
     }
 
-    record ModelResult(ExpressionsBasedModel model, Optimisation.Result result) {
+    static final class GlobalBounds {
+        private final ExpressionsBasedModel model;
+        private Optimisation.Result result;
+
+        private GlobalBounds(ExpressionsBasedModel model, Optimisation.Result result) {
+            this.model = model;
+            this.result = result;
+        }
+
+        private ExpressionsBasedModel getModel() {
+            return model;
+        }
+
+        Optimisation.Result getResult() {
+            if (result == null) {
+                result = minimize(model);
+            }
+            return result;
+        }
+
+        private void clearResult() {
+            result = null;
+        }
     }
 
-    ModelResult initBounds(int minVehicles,
-                           int maxVehicles,
-                           BigDecimal vehicleCapacity,
-                           BigDecimal[] demands,
-                           BigDecimal[][] costMatrix,
-                           long timeout) {
+    GlobalBounds initBounds(int minVehicles,
+                            int maxVehicles,
+                            BigDecimal vehicleCapacity,
+                            BigDecimal[] demands,
+                            BigDecimal[][] costMatrix,
+                            long timeout) {
         var deadline = System.currentTimeMillis() + timeout;
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
@@ -85,12 +109,13 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         buildConstraints(model, minVehicles, maxVehicles, vars);
         model.relax();
 
-        return new ModelResult(model, updateBounds(vehicleCapacity, demands, model, demands.length, deadline));
+        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, demands.length, deadline));
     }
 
     private static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
                                                     BigDecimal[] demands,
                                                     ExpressionsBasedModel model,
+                                                    GlobalBounds globalBounds,
                                                     int size,
                                                     long deadline) {
         //var iter = 1;
@@ -102,13 +127,13 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             setTimeout(deadline, model.options);
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
-            if (addCuts(rccCuts, cuts, model, result, "cut: ", size)) {
+            if (addCuts(rccCuts, cuts, model, result, globalBounds, "cut: ", size)) {
                 result = minimize(model);
                 continue;
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, "subtour cut: ", size)) {
+            if (addCuts(subtourCuts, cuts, model, result, globalBounds, "subtour cut: ", size)) {
                 result = minimize(model);
                 continue;
             }
@@ -122,45 +147,49 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return result;
     }
 
+    /**
+     * Update the bounds model, when called from a search node. This is similar to
+     * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, GlobalBounds, int, long)},
+     * but does not solve the RCC-Sep model unless absolutely necessary.
+     * (we need to check validity. when the node solution is integer)
+     */
     private static Optimisation.Result weakUpdateBounds(BigDecimal vehicleCapacity,
                                                         BigDecimal[] demands,
                                                         ExpressionsBasedModel model,
                                                         int size,
+                                                        GlobalBounds globalBounds,
                                                         long deadline) {
         //var iter = 1;
         setTimeout(deadline, model.options);
         var result = minimize(model);
         var cuts = new HashSet<Set<Integer>>();
 
-        while (result.getState() == OPTIMAL && System.currentTimeMillis() < deadline) {
+        while (System.currentTimeMillis() <= deadline) {
+            if (result.getState() != OPTIMAL) {
+                // probably infeasible. handle this properly.
+                return result;
+            }
             setTimeout(deadline, model.options);
 
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, "subtour cut: ", size)) {
+            if (addCuts(subtourCuts, cuts, model, result, globalBounds, "subtour cut: ", size)) {
                 result = minimize(model);
                 continue;
             }
 
             // no more cuts to add. done.
-            break;
+            // if there are no fractional variables, this is a candidate solution, but we don't know for sure until we've
+            // validated that it satisfies the full set of constraints, so iterate on additional cuts.
+            // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
+            return isInvalidIntegerSolution(vehicleCapacity, demands, result) ?
+                    updateBounds(vehicleCapacity, demands, model, globalBounds, size, deadline) :
+                    result;
         }
 
         //System.out.println(iter + " iterations, " + cuts.size() + " cuts");
 
-        // done or timed out. ( TODO: review/unit test for timeout handling here and throughout.)
-        // if there are no fractional variables, this is a candidate solution, but we don't know for sure until we've
-        // validated that it satisfies the full set of constraints, so iterate on additional cuts.
-        // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
-        return isInvalidIntegerSolution(vehicleCapacity, demands, result) ?
-                updateBounds(vehicleCapacity, demands, model, size, deadline) :
-                result;
-    }
-
-    private record Node(ExpressionsBasedModel model, Optimisation.Result result) {
-        private Node(ModelResult mr) {
-            this(mr.model(), mr.result());
-        }
+        return result.withState(FAILED); // timed out.
     }
 
     @Override
@@ -176,21 +205,34 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
 
         System.out.println("Bounds init complete after " + (System.currentTimeMillis() - start) + "ms");
+        countCuts(globalBounds);
 
-        var stack = new ArrayList<Node>();
+        // stack of pending nodes for depth-first branch-and-bound search. Each node is simply represented as a Map
+        // of variable IDs and values to be fixed in the model. All other needed information is taken from context.
+        var stack = new ArrayList<Map<Integer, BigDecimal>>();
         var nodes = 0;
         Optimisation.Result incumbent = null;
 
-        stack.add(new Node(globalBounds));
+        // the root node has no variables fixed.
+        stack.add(new HashMap<>());
 
-        for (; !stack.isEmpty(); nodes++) {
+        for (; !stack.isEmpty() && deadline > System.currentTimeMillis(); nodes++) {
             var node = stack.removeLast();
 
-            // decide which variable to branch on: find the variable with the smallest rounding
-            // gap to the nearest integer.
-            var frac = IntStream.range(0, (int) node.result().count())
+            var nodeModel = globalBounds.getModel().copy(true, false);
+            node.forEach((k, v) -> nodeModel.getVariable(k).level(v));
+
+            var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, size, globalBounds, deadline);
+
+            // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or FAILED due to timeout.
+            if (nodeResult.getState() != OPTIMAL || incumbent != null && nodeResult.getValue() >= incumbent.getValue()) {
+                continue; // fathom the node
+            }
+
+            // branch on the fractional variable with the smallest rounding gap to the nearest integer.
+            var frac = IntStream.range(0, (int) nodeResult.count())
                     .mapToObj(i -> {
-                        var v = node.result().get(i);
+                        var v = nodeResult.get(i);
                         return new SimpleImmutableEntry<>(i, v.setScale(0, RoundingMode.HALF_EVEN).subtract(v).abs());
                     })
                     .filter(entry -> entry.getValue().signum() > 0)
@@ -198,39 +240,24 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
             if (frac.isPresent()) {
                 var k = frac.get().getKey();
-                var v = node.result().get(k);
+                var v = nodeResult.get(k);
                 var closest = v.setScale(0, RoundingMode.HALF_EVEN);
                 var other = closest.compareTo(v) > 0 ? closest.subtract(ONE) : closest.add(ONE);
 
                 // push two child nodes with variable fixed to `closest` and `other`.
-                var model1 = node.model().copy(true, false);
-                model1.getVariable(k).level(closest);
-                var result1 = weakUpdateBounds(vehicleCapacity, demands, model1, size, deadline);
-
-                var model2 = node.model().copy(true, false);
-                model2.getVariable(k).level(other);
-                var result2 = weakUpdateBounds(vehicleCapacity, demands, model2, size, deadline);
-
-                var node1 = new Node(model1, result1);
-                var node2 = new Node(model2, result2);
-
-                // the greater bound is the worst result. push the best result last, so it's on
-                // top of stack.
-                pushOrFathom(stack, incumbent,
-                        result1.getValue() > result2.getValue() ? new Node[]{node1, node2} : new Node[]{node2, node1});
-
+                // push the closest gap last, so it's on top of stack.
+                pushNode(node, k, other, stack);
+                pushNode(node, k, closest, stack);
             } else {
-                double lb = globalBounds.result().getValue();
-                double ub = node.result().getValue();
+                double lb = globalBounds.getResult().getValue();
+                double ub = nodeResult.getValue();
 
                 if (incumbent == null || ub < incumbent.getValue()) {
-                    var seconds = BigDecimal.valueOf(System.currentTimeMillis() - start)
-                            .divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
+                    System.out.println("[" + elapsedSeconds(start) + "s]: New incumbent. Bounds now " +
+                            (float) lb + '/' + (float) ub + " (" +
+                            BigDecimal.valueOf(lb / ub * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
 
-                    System.out.println("[" + seconds + "s]: New incumbent. Bounds now " + (float) lb + '/' + (float) ub
-                            + " (" + BigDecimal.valueOf(lb / ub * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
-
-                    incumbent = node.result();
+                    incumbent = nodeResult;
 
                     if (ub <= lb) {
                         break;
@@ -251,8 +278,25 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                 .toList();
         System.out.println("Cycle demands: " + cycleDemands);
+        countCuts(globalBounds);
 
         return new Result(incumbent.getValue(), cycles);
+    }
+
+    private static BigDecimal elapsedSeconds(long start) {
+        return BigDecimal.valueOf(System.currentTimeMillis() - start)
+                .divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
+    }
+
+    private static void countCuts(GlobalBounds globalBounds) {
+        var count = globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
+        System.out.println("Currently " + count + " cuts.");
+    }
+
+    private static void pushNode(Map<Integer, BigDecimal> node, Integer k, BigDecimal other, ArrayList<Map<Integer, BigDecimal>> stack) {
+        var node1 = new HashMap<>(node);
+        node1.put(k, other);
+        stack.add(node1);
     }
 
     // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.
@@ -272,11 +316,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         });
     }
 
-    private static void pushOrFathom(List<Node> stack, Optimisation.Result incumbent, Node... nodes) {
-        stream(nodes).filter(n -> incumbent == null || n.result().getValue() <= incumbent.getValue())
-                .forEachOrdered(stack::add);
-    }
-
     // TODO get rid of this. Keeping it around for now because it's still a bit faster than B&B sometimes.
     Result iterativeDeepeningSolver(int minVehicles,
                                     int maxVehicles,
@@ -287,7 +326,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         if (!isLowerTriangular(costMatrix)) {
             throw new UnsupportedOperationException("costMatrix must be lower-triangular.");
         }
-        var deadline = System.currentTimeMillis() + timeout;
+        var start = System.currentTimeMillis();
+        var deadline = start + timeout;
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
         var cuts = new HashSet<Set<Integer>>();
@@ -303,14 +343,14 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             var size = costMatrix.length;
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
-            if (addCuts(rccCuts, cuts, model, result, "cut: ", vars.length)) {
+            if (addCuts(rccCuts, cuts, model, result, null, "cut: ", vars.length)) {
                 result = minimize(model.snapshot());
                 continue;
             }
 
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, "subtour cut: ", vars.length)) {
+            if (addCuts(subtourCuts, cuts, model, result, null, "subtour cut: ", vars.length)) {
                 result = minimize(model.snapshot());
                 continue;
             }
@@ -321,8 +361,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             try {
                 cycles = findCycles(size, result);
             } catch (IllegalArgumentException e) {
-                System.out.println("Solution is not integer. Re-solving.");
+                var relaxed = result.getValue();
+                var substart = System.currentTimeMillis();
                 result = minimize(model);
+                System.out.println("[" + elapsedSeconds(start) + "s] " + (System.currentTimeMillis() - substart) +
+                        "ms discrete re-solve. LP bound: " + (float) relaxed + ", ILP: " +
+                        (float) result.getValue());
                 continue;
             }
 
@@ -330,7 +374,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             var cycleDemands = cycles.stream()
                     .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                     .toList();
-            System.out.println("Cycle demands: " + cycleDemands);
+            System.out.println("Cost " + result.getValue() + ", cycle demands: " + cycleDemands);
 
             return new Result(result.getValue(), cycles);
         }
@@ -342,15 +386,17 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                    Set<Set<Integer>> cuts,
                                    ExpressionsBasedModel model,
                                    Optimisation.Result result,
+                                   GlobalBounds globalBounds,
                                    String label,
                                    int size) {
-        return candidates.stream().map(cut -> addCut(cuts, model, result, cut, label, size))
+        return candidates.stream().map(cut -> addCut(cuts, model, result, globalBounds, cut, label, size))
                 .reduce(false, (a, b) -> a || b);
     }
 
     private static boolean addCut(Set<Set<Integer>> cuts,
                                   ExpressionsBasedModel model,
                                   Optimisation.Result result,
+                                  GlobalBounds globalBounds,
                                   Cut cut,
                                   String label,
                                   int size) {
@@ -358,23 +404,33 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         subset.remove(0);
 
         if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
-            addCut(size, model, subset, cut.minVehicles(), label + formatCut(subset));
+            addCut(size, model, globalBounds, subset, cut.minVehicles(), label + formatCut(subset));
             return true;
         }
         return false;
     }
 
+    // add a cut to the node-local model, and also propagate it to the global model
+    // if `globalBounds` is not null.
     private static void addCut(int size,
                                ExpressionsBasedModel model,
+                               GlobalBounds globalBounds,
                                Set<Integer> subset,
                                int minVehicles,
                                String name) {
         var min = minVehicles * 2L;
 
-        // TODO I know we're adding redundant cuts during B&B search.
-        // suppressing this logging for now.
         //System.out.println("Adding " + name + " >= " + min);
 
+        addCut(size, model, subset, name, min);
+        if (globalBounds != null) {
+            addCut(size, globalBounds.getModel(), subset, name, min);
+            // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
+            globalBounds.clearResult();
+        }
+    }
+
+    private static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long min) {
         var cut = model.newExpression(name).lower(min);
 
         for (var target : subset) {
