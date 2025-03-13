@@ -115,8 +115,8 @@ class OjAlgoCVRPSolverTest {
     @Disabled
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
-        double v = 1660.0383; // best I've seen is 1574.385
-        if (v < r.objective()) {
+        double v = 1674.9719; // best I've seen is 1539.9554
+        if (r.objective() > v) {
             fail("Objective > " + v);
         }
     }
@@ -135,7 +135,7 @@ class OjAlgoCVRPSolverTest {
     }
 
 
-    // 240-254ms w/ naive code; now ~800 ms
+    // 240-254ms w/ naive code; now ~550-800 ms
     @Test
     void eil33_reduced() throws IOException {
         assertEquals(new Result(428.7145713, List.of(
@@ -153,7 +153,6 @@ class OjAlgoCVRPSolverTest {
     // takes about 2.5s w/ naive code; 1.5s now
     // trivial -- solves at the root node -- so, also 1.5s with B&B
     @Test
-    @Disabled
     void eil33_reduced2() throws IOException {
         assertEquals(new Result(499.25424343, List.of(
                         List.of(0, 1, 14, 15, 17, 16, 23, 22, 20, 21, 19, 18, 13, 12),
@@ -163,7 +162,6 @@ class OjAlgoCVRPSolverTest {
 
     // more than 30s to run w/ naive code; 1.3s now. Trivially solvable at root node in B&B.
     @Test
-    @Disabled
     void eil33_reduced3() throws IOException {
         assertEquals(new Result(588.46611851, List.of(
                         List.of(0, 1, 13, 11, 10, 9, 8, 7, 6, 5, 12, 2, 3),

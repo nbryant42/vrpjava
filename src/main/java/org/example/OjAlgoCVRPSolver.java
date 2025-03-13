@@ -7,8 +7,10 @@ import org.ojalgo.optimisation.Variable;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -55,6 +57,9 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper.</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
+    private double bestFirstRatio = 0.85;
+    private long bestFirstMillis = 30_000L;
+
     public record Cut(int minVehicles, Set<Integer> subset) {
         Cut(int size, Optimisation.Result result) {
             this(alpha(result), IntStream.range(1, size)
@@ -219,9 +224,13 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         System.out.println("Bounds init complete after " + (System.currentTimeMillis() - start) + "ms");
         countCuts(globalBounds);
 
-        // queue of pending nodes for depth-first branch-and-bound search. Each node is simply represented as a Map
-        // of variable IDs and values to be fixed in the model. All other needed information is taken from context.
-        var queue = new PriorityQueue<Node>(); // Collections.asLifoQueue(new ArrayDeque<Node>());
+        // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
+        // of variable IDs and values to be fixed in the model.
+        // The queue can be either a LIFO queue (stack) for depth-first search or a priority queue for best-first
+        // search. Depth-first search finds many valid solutions more quickly, whereas best-first search is more likely
+        // to proceed directly to the better solutions, but will explore more internal nodes before it gets there. We
+        // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
+        var queue = Collections.asLifoQueue(new ArrayDeque<Node>());
         var nodes = 0;
         Optimisation.Result incumbent = null;
 
@@ -268,10 +277,19 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 queueNode(node, ub, k, closest, gap, queue);
             } else if (incumbent == null || ub < incumbent.getValue()) {
                 double lb = globalBounds.getResult().getValue();
+                double ratio = lb / ub;
+                var elapsed = System.currentTimeMillis() - start;
 
-                System.out.println("[" + elapsedSeconds(start) + "s]: New incumbent. Bounds now " +
+                if (!(queue instanceof PriorityQueue<Node>) && ratio > bestFirstRatio && elapsed < bestFirstMillis) {
+                    // Found a feasible solution, and bounds are tight enough that best-first search may help.
+                    // Switch to best-first search.
+                    // Also, if it's taken us more than X amount of time to get here, then we're working a
+                    // hard problem, and it's not a good idea to switch.
+                    queue = new PriorityQueue<>(queue);
+                }
+                System.out.println("[" + toSeconds(elapsed) + "s]: New incumbent. Bounds now " +
                         (float) lb + '/' + (float) ub + " (" +
-                        BigDecimal.valueOf(lb / ub * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
+                        BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
 
                 incumbent = nodeResult;
 
@@ -298,9 +316,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return new Result(incumbent.getValue(), cycles);
     }
 
-    private static BigDecimal elapsedSeconds(long start) {
-        return BigDecimal.valueOf(System.currentTimeMillis() - start)
-                .divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
+    private static BigDecimal toSeconds(long val) {
+        return BigDecimal.valueOf(val).divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
     }
 
     private static void countCuts(GlobalBounds globalBounds) {
@@ -379,8 +396,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 var relaxed = result.getValue();
                 var substart = System.currentTimeMillis();
                 result = minimize(model);
-                System.out.println("[" + elapsedSeconds(start) + "s] " + (System.currentTimeMillis() - substart) +
-                        "ms discrete re-solve. LP bound: " + (float) relaxed + ", ILP: " +
+                var now = System.currentTimeMillis();
+                System.out.println("[" + toSeconds(now - start) + "s] " + toSeconds(now - substart) +
+                        "s discrete re-solve. LP bound: " + (float) relaxed + ", ILP: " +
                         (float) result.getValue());
                 continue;
             }
@@ -790,5 +808,34 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             }
         }
         return vars;
+    }
+
+    @SuppressWarnings("unused")
+    public double getBestFirstRatio() {
+        return bestFirstRatio;
+    }
+
+    @SuppressWarnings("unused")
+    public long getBestFirstMillis() {
+        return bestFirstMillis;
+    }
+
+    /**
+     * Set the minimum bounds ratio before switching to best-first search. The consequences of getting this tunable
+     * wrong are asymmetrical: best-first search will likely ruin any possibility of getting even an approximate result
+     * for the hard problems, but depth-first search will greatly slow down the easy problems.
+     * <p>
+     * There is no single ratio threshold that works best for both cases. Therefore, this works in conjunction with
+     * {@link #setBestFirstMillis(long)}, and the switch does not occur unless both the ratio and a maximum time limit
+     * are satisfied. (If it's already taken too long, we know we're working on a hard problem instance.)
+     */
+    @SuppressWarnings("unused")
+    public void setBestFirstRatio(double bestFirstRatio) {
+        this.bestFirstRatio = bestFirstRatio;
+    }
+
+    @SuppressWarnings("unused")
+    public void setBestFirstMillis(long bestFirstMillis) {
+        this.bestFirstMillis = bestFirstMillis;
     }
 }
