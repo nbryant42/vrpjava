@@ -51,13 +51,13 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     @Disabled
-    void eil33_iterativeDeepening() throws IOException {
+    void eil33_iterativeRowGen() throws IOException {
         _eil33_iterative(8000, 30_000L);
     }
 
     @Test
     @Disabled
-    void eil33_iterativeDeepening_insane() throws IOException {
+    void eil33_iterativeRowGen_insane() throws IOException {
         _eil33_iterative(4000, 300_000L);
     }
 
@@ -90,7 +90,7 @@ class OjAlgoCVRPSolverTest {
         var capacity = BigDecimal.valueOf(val);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
-        var result = solver.iterativeDeepeningSolver(minVehicles, dim - 1, capacity, demands, costs, timeout);
+        var result = solver.iterativeRowGenSolver(minVehicles, dim - 1, capacity, demands, costs, timeout);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 

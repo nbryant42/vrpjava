@@ -363,12 +363,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     }
 
     // TODO get rid of this. Keeping it around for now because it's still a bit faster than B&B sometimes.
-    Result iterativeDeepeningSolver(int minVehicles,
-                                    int maxVehicles,
-                                    BigDecimal vehicleCapacity,
-                                    BigDecimal[] demands,
-                                    BigDecimal[][] costMatrix,
-                                    long timeout) {
+    Result iterativeRowGenSolver(int minVehicles,
+                                 int maxVehicles,
+                                 BigDecimal vehicleCapacity,
+                                 BigDecimal[] demands,
+                                 BigDecimal[][] costMatrix,
+                                 long timeout) {
         if (!isLowerTriangular(costMatrix)) {
             throw new UnsupportedOperationException("costMatrix must be lower-triangular.");
         }
