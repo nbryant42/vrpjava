@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava;
 
 import org.junit.jupiter.api.Test;
 

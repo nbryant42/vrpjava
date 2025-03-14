@@ -1,6 +1,6 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
-import org.example.CVRPSolver.Result;
+import com.github.vrpjava.cvrp.CVRPSolver.Result;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

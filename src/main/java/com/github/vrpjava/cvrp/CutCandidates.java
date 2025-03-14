@@ -1,6 +1,6 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
-import org.example.OjAlgoCVRPSolver.Cut;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
@@ -9,7 +9,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static java.lang.Math.min;
-import static org.example.OjAlgoCVRPSolver.isViolated;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.isViolated;
 
 public class CutCandidates {
     private final int size;
@@ -43,10 +43,6 @@ public class CutCandidates {
     public CutCandidates(int size, Optimisation.Result parentResult) {
         this.size = size;
         this.parentResult = parentResult;
-    }
-
-    public int getSize() {
-        return size;
     }
 
     public Set<Cut> getCuts() {

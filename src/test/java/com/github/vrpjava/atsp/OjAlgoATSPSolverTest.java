@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.atsp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,7 +14,7 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Arrays.deepToString;
-import static org.example.Util.setUpHardware;
+import static com.github.vrpjava.Util.setUpHardware;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class OjAlgoATSPSolverTest {

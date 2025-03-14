@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.atsp;
 
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -13,8 +13,8 @@ import java.util.stream.IntStream;
 
 import static java.math.BigDecimal.ONE;
 import static java.util.stream.Collectors.toSet;
-import static org.example.Util.buildAsymmetricVars;
-import static org.example.Util.newModel;
+import static com.github.vrpjava.Util.buildAsymmetricVars;
+import static com.github.vrpjava.Util.newModel;
 
 /**
  * Solver for the Asymmetric Travelling Salesman Problem.

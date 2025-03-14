@@ -1,4 +1,6 @@
-package org.example;
+package com.github.vrpjava.atsp;
+
+import com.github.vrpjava.Util;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

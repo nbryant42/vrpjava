@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

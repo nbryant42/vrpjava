@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
 import org.ojalgo.function.multiary.MultiaryFunction;
 import org.ojalgo.optimisation.ExpressionsBasedModel;

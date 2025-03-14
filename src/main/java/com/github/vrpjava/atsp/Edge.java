@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.atsp;
 
 public record Edge(int src, int dest) {
     @Override

@@ -8,13 +8,13 @@
     <version>3.4.3</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
-  <groupId>org.example</groupId>
+  <groupId>com.github</groupId>
   <artifactId>vrpjava</artifactId>
   <version>0.0.1-SNAPSHOT</version>
 
   <name>vrpjava</name>
   <description>Exact/approximate VRP solver in pure Java</description>
-  <url>http://www.example.org</url>
+  <url>https://github.com/nbryant42/vrpjava</url>
 
   <licenses>
     <license/>

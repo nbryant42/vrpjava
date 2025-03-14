@@ -1,6 +1,6 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
-import org.example.OjAlgoCVRPSolver.Cut;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
@@ -8,8 +8,8 @@ import java.util.Collection;
 import java.util.List;
 
 import static java.math.BigDecimal.ZERO;
-import static org.example.CVRPSolver.minVehicles;
-import static org.example.OjAlgoCVRPSolver.findFractionalCycles;
+import static com.github.vrpjava.cvrp.CVRPSolver.minVehicles;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findFractionalCycles;
 
 class SubtourCuts {
     static List<Cut> generate(BigDecimal vehicleCapacity,

@@ -1,7 +1,7 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
 import io.github.lmores.tsplib.TsplibArchive;
-import org.example.OjAlgoCVRPSolver.GlobalBounds;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.GlobalBounds;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -17,9 +17,9 @@ import static java.lang.Math.min;
 import static java.lang.Math.pow;
 import static java.lang.Math.sqrt;
 import static java.math.BigDecimal.ZERO;
-import static org.example.CVRPSolver.Result;
-import static org.example.OjAlgoCVRPSolver.base;
-import static org.example.Util.setUpHardware;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
+import static com.github.vrpjava.Util.setUpHardware;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 

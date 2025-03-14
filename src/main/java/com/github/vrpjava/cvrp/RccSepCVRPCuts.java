@@ -1,6 +1,7 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
-import org.example.OjAlgoCVRPSolver.Cut;
+import com.github.vrpjava.Util;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.concurrent.Parallelism;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -21,7 +22,7 @@ import java.util.function.IntSupplier;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
-import static org.example.OjAlgoCVRPSolver.getVariable;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.getVariable;
 import static org.ojalgo.optimisation.integer.NodeKey.FIFO_SEQUENCE;
 import static org.ojalgo.optimisation.integer.NodeKey.LARGE_DISPLACEMENT;
 import static org.ojalgo.optimisation.integer.NodeKey.LIFO_SEQUENCE;

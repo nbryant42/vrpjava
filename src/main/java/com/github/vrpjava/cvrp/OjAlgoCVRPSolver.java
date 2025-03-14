@@ -1,4 +1,4 @@
-package org.example;
+package com.github.vrpjava.cvrp;
 
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -28,11 +28,11 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.example.CutCandidates.round;
-import static org.example.SubtourCuts.formatCut;
-import static org.example.Util.isLowerTriangular;
-import static org.example.Util.newModel;
-import static org.example.Util.setTimeout;
+import static com.github.vrpjava.cvrp.CutCandidates.round;
+import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
+import static com.github.vrpjava.Util.isLowerTriangular;
+import static com.github.vrpjava.Util.newModel;
+import static com.github.vrpjava.Util.setTimeout;
 import static org.ojalgo.optimisation.Optimisation.State.FAILED;
 import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
