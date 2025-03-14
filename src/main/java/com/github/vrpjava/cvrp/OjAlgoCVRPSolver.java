@@ -43,7 +43,7 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
  *
  * <ul>
  *     <li>The ojAlgo solver (which has available interfaces to commercial solvers)</li>
- *     <li>The Two-Index Vehicle Flow Formulation<li>
+ *     <li>The Two-Index Vehicle Flow Formulation</li>
  *     <li>The Pavlikov-Petersen-Sørensen "RCC-Sep" algorithm (for both lower bounds and row generation.)</li>
  * </ul>
  * <p>
@@ -51,10 +51,10 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
  * In the future, if support for the asymmetric problem is implemented, the plan is to detect whether the cost
  * matrix is lower-triangular, and adapt accordingly.
  *
- * @see CVRPSolver for more usage details.
- * @see RccSepCVRPCuts for the RCC-Sep subroutine.
- * @see <a href="https://repub.eur.nl/pub/135594/EI2021-01.pdf">This PDF</a> for proofs on the LP bound.
- * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper.</a>
+ * @see CVRPSolver for more usage details
+ * @see RccSepCVRPCuts for the RCC-Sep subroutine
+ * @see <a href="https://repub.eur.nl/pub/135594/EI2021-01.pdf">This PDF</a> for proofs on the LP bound
+ * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
     /**
@@ -847,6 +847,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
      * @return value in milliseconds
      * @see #setBestFirstMillis(long)
      */
+    @SuppressWarnings("unused")
     public long getBestFirstMillis() {
         return bestFirstMillis;
     }

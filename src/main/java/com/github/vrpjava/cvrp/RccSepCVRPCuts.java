@@ -41,7 +41,7 @@ import static org.ojalgo.optimisation.integer.NodeKey.SMALL_DISPLACEMENT;
  *
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The paper.</a>
  */
-public class RccSepCVRPCuts {
+class RccSepCVRPCuts {
     private RccSepCVRPCuts() {
     }
 
