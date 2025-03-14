@@ -115,7 +115,7 @@ class OjAlgoCVRPSolverTest {
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
         // best I've seen from a <= 5 minute run is 1539.9554.
-        // I also saw some better results, but that took some time after hardcoding the lower bound.
+        // I also saw some better results, but that took a lot of time after hardcoding the upper bound.
         // Best known (to me) solution is as follows, obtained on a Ryzen 9 3900X:
         //
         // [22.176s]: Bounds init complete. Bounds from heuristic: 1430.6775/1539.9556 (92.90%)

@@ -119,19 +119,19 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         buildConstraints(model, minVehicles, maxVehicles, vars);
         model.relax();
 
-        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, demands.length, deadline));
+        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
     }
 
     private static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
                                                     BigDecimal[] demands,
                                                     ExpressionsBasedModel model,
                                                     GlobalBounds globalBounds,
-                                                    int size,
                                                     long deadline) {
         //var iter = 1;
         setTimeout(deadline, model.options);
         var result = minimize(model);
         var cuts = new HashSet<Set<Integer>>();
+        var size = demands.length;
 
         while (result.getState() == OPTIMAL && System.currentTimeMillis() < deadline) {
             setTimeout(deadline, model.options);
@@ -159,20 +159,20 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
     /**
      * Update the bounds model, when called from a search node. This is similar to
-     * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, GlobalBounds, int, long)},
+     * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, GlobalBounds, long)},
      * but does not solve the RCC-Sep model unless absolutely necessary.
      * (we need to check validity. when the node solution is integer)
      */
     private static Optimisation.Result weakUpdateBounds(BigDecimal vehicleCapacity,
                                                         BigDecimal[] demands,
                                                         ExpressionsBasedModel model,
-                                                        int size,
                                                         GlobalBounds globalBounds,
                                                         long deadline) {
         //var iter = 1;
         setTimeout(deadline, model.options);
         var result = minimize(model);
         var cuts = new HashSet<Set<Integer>>();
+        var size = demands.length;
 
         while (System.currentTimeMillis() <= deadline) {
             if (result.getState() != OPTIMAL) {
@@ -193,7 +193,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             // validated that it satisfies the full set of constraints, so iterate on additional cuts.
             // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
             return isInvalidIntegerSolution(vehicleCapacity, demands, result) ?
-                    updateBounds(vehicleCapacity, demands, model, globalBounds, size, deadline) :
+                    updateBounds(vehicleCapacity, demands, model, globalBounds, deadline) :
                     result;
         }
 
@@ -217,7 +217,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                              BigDecimal[] demands,
                              BigDecimal[][] costMatrix,
                              long timeout) {
-        var size = costMatrix.length;
         var start = System.currentTimeMillis();
         var deadline = start + timeout;
         var kickstarter = heuristic.doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
@@ -225,8 +224,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
                 deadline - System.currentTimeMillis());
 
+        if (globalBounds.getResult().getState() != OPTIMAL) {
+            return buildResult(demands, null, kickstarter, 0, globalBounds, bestKnown);
+        }
+
         logHeuristicBounds(start, globalBounds.getResult().getValue(), bestKnown);
-        countCuts(globalBounds);
+        logCutCount(globalBounds);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
         // of variable IDs and values to be fixed in the model.
@@ -239,7 +242,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         Optimisation.Result incumbent = null;
 
         // the root node has no variables fixed.
-        queue.add(new Node(globalBounds.result.getValue(), ZERO, Map.of()));
+        queue.add(new Node(globalBounds.getResult().getValue(), ZERO, Map.of()));
 
         for (Node node; deadline > System.currentTimeMillis() && (node = queue.poll()) != null; nodes++) {
             // double-check the parent node's bound before we go any further; the best-known solution may have
@@ -250,7 +253,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             var nodeModel = globalBounds.getModel().copy(true, false);
             node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
-            var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, size, globalBounds, deadline);
+            var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, globalBounds, deadline);
             double ub = nodeResult.getValue();
 
             // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or FAILED due to timeout.
@@ -303,14 +306,19 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             }
         }
 
-        var cycles = incumbent == null ? kickstarter.cycles() : findCycles(size, incumbent);
+        return buildResult(demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
+    }
+
+    private static Result buildResult(BigDecimal[] demands, Optimisation.Result incumbent, Result kickstarter,
+                                      int nodes, GlobalBounds globalBounds, double bestKnown) {
+        var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
 
         System.out.println(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
         var cycleDemands = cycles.stream()
                 .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                 .toList();
         System.out.println("Cycle demands: " + cycleDemands);
-        countCuts(globalBounds);
+        logCutCount(globalBounds);
 
         return new Result(bestKnown, cycles);
     }
@@ -326,7 +334,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return BigDecimal.valueOf(val).divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
     }
 
-    private static void countCuts(GlobalBounds globalBounds) {
+    private static void logCutCount(GlobalBounds globalBounds) {
         var count = globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
         System.out.println("Currently " + count + " cuts.");
     }
