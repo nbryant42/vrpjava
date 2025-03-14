@@ -57,11 +57,17 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper.</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
+    /**
+     * Default constructor.
+     */
+    public OjAlgoCVRPSolver() {
+    }
+
     private double bestFirstRatio = 0.80;
     private long bestFirstMillis = 30_000L;
     private CVRPSolver heuristic = new NearestNeighborCVRPSolver();
 
-    public record Cut(int minVehicles, Set<Integer> subset) {
+    record Cut(int minVehicles, Set<Integer> subset) {
         Cut(int size, Optimisation.Result result) {
             this(alpha(result), IntStream.range(1, size)
                     .filter(i -> result.get(i).signum() > 0)
@@ -824,12 +830,23 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return vars;
     }
 
+    /**
+     * Get the currently configured ratio threshold for "hard" problems.
+     *
+     * @return value as a ratio from lower to upper bound
+     * @see #setBestFirstRatio(double)
+     */
     @SuppressWarnings("unused")
     public double getBestFirstRatio() {
         return bestFirstRatio;
     }
 
-    @SuppressWarnings("unused")
+    /**
+     * Get the currently configured threshold time for "hard" problems.
+     *
+     * @return value in milliseconds
+     * @see #setBestFirstMillis(long)
+     */
     public long getBestFirstMillis() {
         return bestFirstMillis;
     }
@@ -842,22 +859,45 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
      * There is no single ratio threshold that works best for both cases. Therefore, this works in conjunction with
      * {@link #setBestFirstMillis(long)}, and the switch does not occur unless both the ratio and a maximum time limit
      * are satisfied. (If it's already taken too long, we know we're working on a hard problem instance.)
+     *
+     * @param bestFirstRatio the minimum ratio.
      */
     @SuppressWarnings("unused")
     public void setBestFirstRatio(double bestFirstRatio) {
         this.bestFirstRatio = bestFirstRatio;
     }
 
+    /**
+     * Used in conjunction with {@link #setBestFirstRatio(double)}
+     *
+     * @param bestFirstMillis milliseconds after which the problem is considered "hard", and we no longer consider
+     *                        switching to best-first search.
+     */
     @SuppressWarnings("unused")
     public void setBestFirstMillis(long bestFirstMillis) {
         this.bestFirstMillis = bestFirstMillis;
     }
 
+    /**
+     * Get the currently configured heuristic implementation.
+     *
+     * @return {@link CVRPSolver}
+     * @see #setHeuristic(CVRPSolver)
+     */
     @SuppressWarnings("unused")
     public CVRPSolver getHeuristic() {
         return heuristic;
     }
 
+    /**
+     * Set the implementation of {@link CVRPSolver} that will be used to determine the heuristic starting point.
+     * <p>
+     * A starting point helps improve the upper bound and eliminate nodes searched by the branch-and-bound process,
+     * so this is required. The default is {@link NearestNeighborCVRPSolver}.
+     * If you have a better heuristic, set it here.
+     *
+     * @param heuristic any subclass of {@link CVRPSolver} (but not this instance!)
+     */
     @SuppressWarnings("unused")
     public void setHeuristic(CVRPSolver heuristic) {
         this.heuristic = heuristic;

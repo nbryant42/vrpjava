@@ -10,7 +10,7 @@ import org.ojalgo.structure.Access1D;
 
 import java.lang.reflect.Method;
 
-public class CallbackStrategy extends ModelStrategy.AbstractStrategy {
+class CallbackStrategy extends ModelStrategy.AbstractStrategy {
     private final CutCandidates candidates;
     private final Method initialise;
     private final Method isCutRatherThanBranch;

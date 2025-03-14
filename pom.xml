@@ -17,10 +17,21 @@
   <url>https://github.com/nbryant42/vrpjava</url>
 
   <licenses>
-    <license/>
+    <license>
+      <name>Non-commercial use only. Academic and student use is OK.</name>
+      <comments>
+        In other words, if you're using this code in production to optimize actual vehicle
+        routing in the real world, and it's saving you money, that is prohibited without negotiating an
+        alternative license.
+        Contact the author at (nbryant at optonline dot net) to discuss an alternative license.
+      </comments>
+    </license>
   </licenses>
   <developers>
-    <developer/>
+    <developer>
+      <name>Nathan Bryant</name>
+      <url>https://github.com/nbryant42</url>
+    </developer>
   </developers>
   <scm>
     <connection/>
@@ -65,4 +76,36 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-site-plugin</artifactId>
+        <version>3.21.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-project-info-reports-plugin</artifactId>
+        <version>3.9.0</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.11.2</version>
+        <reportSets>
+          <reportSet>
+            <reports>
+              <report>javadoc</report>
+            </reports>
+          </reportSet>
+        </reportSets>
+      </plugin>
+    </plugins>
+  </reporting>
 </project>

@@ -12,7 +12,7 @@ import static java.util.Arrays.stream;
 import static java.util.stream.IntStream.range;
 
 /**
- * Solver for the Capacitated Vehicle Routing Problem (CVRP).
+ * Abstract superclass of solvers for the Capacitated Vehicle Routing Problem (CVRP).
  * <p>
  * Assumes that there is one depot, which must be represented as index 0 in the
  * cost matrix. <code>demands</code> should have the same dimension as
@@ -24,9 +24,37 @@ import static java.util.stream.IntStream.range;
  * minimization, the number of vehicles used will also be minimized.
  */
 public abstract class CVRPSolver {
+    /**
+     * Default constructor.
+     */
+    protected CVRPSolver() {
+    }
+
+    /**
+     * Record type to hold a solution to the problem.
+     *
+     * @param objective the total travel cost (or distance) of the solution
+     * @param cycles    a list of "cycles" for each vehicle, so called because they represent a Hamiltonian Cycle.
+     *                  Each cycle is a list of locations visited by the vehicle, represented as integer array indexes
+     *                  into the corresponding problem spec, starting with zero (the depot.)
+     */
     public record Result(double objective, List<List<Integer>> cycles) {
     }
 
+    /**
+     * Equivalent to <code>solve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
+     * 1000L * 60L * 60L)</code>
+     *
+     * @param minVehicles     Require a solution using at least this many vehicles.
+     *                        Typically set to 1.
+     * @param maxVehicles     require a solution using at most this many vehicles.
+     *                        Typically set to <code>demands.length - 1</code>
+     * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
+     * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
+     * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
+     * @return the solution, which may be exact or approximate
+     * @see #solve(int, int, BigDecimal, BigDecimal[], BigDecimal[][], long)
+     */
     @SuppressWarnings("unused")
     public final Result solve(int minVehicles,
                               int maxVehicles,
@@ -36,6 +64,19 @@ public abstract class CVRPSolver {
         return solve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, 1000L * 60L * 60L);
     }
 
+    /**
+     * Solve the symmetric Capacitated Vehicle Routing Problem (CVRP)
+     *
+     * @param minVehicles     Require a solution using at least this many vehicles.
+     *                        Typically set to 1.
+     * @param maxVehicles     require a solution using at most this many vehicles.
+     *                        Typically set to <code>demands.length - 1</code>
+     * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
+     * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
+     * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
+     * @param timeoutMillis   Maximum wall-clock time in milliseconds.
+     * @return the solution, which may be exact or approximate
+     */
     public final Result solve(int minVehicles,
                               int maxVehicles,
                               BigDecimal vehicleCapacity,
@@ -75,19 +116,52 @@ public abstract class CVRPSolver {
     }
 
     /**
+     * <p>
      * Given <code>vehicleCapacity</code>, return the minimum number of vehicles required to
      * satisfy <code>demands</code>.
-     * <p>
+     * </p><p>
      * An exact minimum requires solving a bin-packing sub-problem, so this is just an approximate lower bound.
+     * </p>
+     *
+     * @param vehicleCapacity maximum vehicle capacity in <code>demands</code> units
+     * @param demands         array of customer demands
+     * @return an integer
      */
     public static int minVehicles(BigDecimal vehicleCapacity, BigDecimal[] demands) {
         return minVehicles(vehicleCapacity, stream(demands).reduce(ZERO, BigDecimal::add));
     }
 
+    /**
+     * <p>
+     * Given <code>vehicleCapacity</code>, return the minimum number of vehicles required to
+     * satisfy <code>totalDemands</code>.
+     * </p><p>
+     * An exact minimum requires solving a bin-packing sub-problem, so this is just an approximate lower bound.
+     * </p>
+     *
+     * @param vehicleCapacity maximum vehicle capacity in <code>totalDemands</code> units
+     * @param totalDemands    total customer demands
+     * @return an integer
+     */
     public static int minVehicles(BigDecimal vehicleCapacity, BigDecimal totalDemands) {
         return totalDemands.divide(vehicleCapacity, 0, RoundingMode.CEILING).intValueExact();
     }
 
+    /**
+     * Must be implemented by subclasses. Called by
+     * {@link #solve(int, int, BigDecimal, BigDecimal[], BigDecimal[][], long)} after performing parameter validations.
+     *
+     * @param minVehicles     require a solution using at least this many vehicles.
+     *                        Typically set to 1.
+     * @param maxVehicles     require a solution using at most this many vehicles.
+     *                        Typically set to <code>demands.length - 1</code>
+     * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
+     * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
+     * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
+     * @param timeout         Maximum wall-clock time in milliseconds. The implementation should do its best to observe
+     *                        this.
+     * @return the solution, which may be exact or approximate
+     */
     protected abstract Result doSolve(int minVehicles,
                                       int maxVehicles,
                                       BigDecimal vehicleCapacity,

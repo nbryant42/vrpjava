@@ -29,19 +29,22 @@ import static org.ojalgo.optimisation.integer.NodeKey.LIFO_SEQUENCE;
 import static org.ojalgo.optimisation.integer.NodeKey.SMALL_DISPLACEMENT;
 
 /**
+ * <p>
  * An implementation of the Pavlikov-Petersen-Sørensen "RCC-Sep" algorithm.
- * <p>
  * Variable names are as used in (2.6) through (2.13) in section 2 of the paper.
- * <p>
+ * </p><p>
  * This is an exact algorithm which finds the smallest cut-set for the biggest constraint violation, thus these
- * cuts <em>might<em> tend to dominate other cuts and <em>might<em> minimize the total number of cuts added.
- * This seems more likely to be the case for larger problem instances.
- * <p>
+ * cuts tend to dominate other cuts and can minimize the total number of cuts added.
+ * </p><p>
  * The cuts can be computed from a fractional relaxed solution in most cases, which speeds things up.
+ * </p>
  *
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The paper.</a>
  */
 public class RccSepCVRPCuts {
+    private RccSepCVRPCuts() {
+    }
+
     private static final BigDecimal MINUS_ONE = ONE.negate();
     // tunable. 0.5 is used in the paper. we use this as an .upper(), so it's negated vs. the paper.
     private static final BigDecimal EPSILON1 = BigDecimal.valueOf(-0.5);

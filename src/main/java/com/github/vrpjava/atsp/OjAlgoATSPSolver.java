@@ -20,6 +20,12 @@ import static com.github.vrpjava.Util.newModel;
  * Solver for the Asymmetric Travelling Salesman Problem.
  */
 public class OjAlgoATSPSolver extends ATSPSolver {
+    /**
+     * Default constructor
+     */
+    public OjAlgoATSPSolver() {
+    }
+
     @Override
     protected List<Edge> doSolve(BigDecimal[][] costMatrix, long timeout) {
         // TODO check for the trivial 2x2 problem.

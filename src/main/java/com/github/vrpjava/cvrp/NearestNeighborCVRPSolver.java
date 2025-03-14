@@ -11,7 +11,25 @@ import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 
+/**
+ * <p>
+ * A fast, but very simple heuristic solver for the Capacitated Vehicle Routing Problem.
+ * </p><p>
+ * The solutions returned are not very good, but they are better than nothing.
+ * </p><p>
+ * Best used to provide the starting point for a better solver.
+ * Used by {@link OjAlgoCVRPSolver} by default.
+ * </p>
+ *
+ * @see OjAlgoCVRPSolver#setHeuristic(CVRPSolver)
+ */
 public class NearestNeighborCVRPSolver extends CVRPSolver {
+    /**
+     * Default constructor
+     */
+    public NearestNeighborCVRPSolver() {
+    }
+
     @Override
     protected Result doSolve(int minVehicles,
                              int maxVehicles,
