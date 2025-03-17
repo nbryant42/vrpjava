@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
@@ -23,17 +24,16 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static com.google.common.collect.MoreCollectors.onlyElement;
+import static com.github.vrpjava.Util.isLowerTriangular;
+import static com.github.vrpjava.Util.newModel;
+import static com.github.vrpjava.Util.setTimeout;
+import static com.github.vrpjava.cvrp.CutCandidates.round;
+import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
 import static java.lang.Double.POSITIVE_INFINITY;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static com.github.vrpjava.cvrp.CutCandidates.round;
-import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
-import static com.github.vrpjava.Util.isLowerTriangular;
-import static com.github.vrpjava.Util.newModel;
-import static com.github.vrpjava.Util.setTimeout;
 import static org.ojalgo.optimisation.Optimisation.State.FAILED;
 import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
@@ -762,11 +762,14 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     }
 
     private static Target getNextNode(int node, int previous, int size, Optimisation.Result result) {
-        try {
-            return arcsFrom(node, size, result).stream().filter(t -> t.node != previous).collect(onlyElement());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("arcs from " + node + " excluding " + previous + ": " + e.getMessage());
-        }
+        var nextNodes = arcsFrom(node, size, result).stream().filter(t -> t.node != previous).toList();
+
+        return switch (nextNodes.size()) {
+            case 0 -> throw new NoSuchElementException();
+            case 1 -> nextNodes.getFirst();
+            default -> throw new IllegalArgumentException("more than 1 arcs from " + node + " excluding " + previous +
+                    ": " + nextNodes);
+        };
     }
 
     private static List<Integer> getNextNodes(Set<Integer> cycle, int node, int size, Optimisation.Result result) {
