@@ -338,7 +338,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 BigDecimal.valueOf((lb / ub) * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
     }
 
-    private static BigDecimal toSeconds(long val) {
+    static BigDecimal toSeconds(long val) {
         return BigDecimal.valueOf(val).divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
     }
 
@@ -370,80 +370,13 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         });
     }
 
-    // TODO get rid of this. Keeping it around for now because it's still a bit faster than B&B sometimes.
-    Result iterativeRowGenSolver(int minVehicles,
-                                 int maxVehicles,
-                                 BigDecimal vehicleCapacity,
-                                 BigDecimal[] demands,
-                                 BigDecimal[][] costMatrix,
-                                 long timeout) {
-        if (!isLowerTriangular(costMatrix)) {
-            throw new UnsupportedOperationException("costMatrix must be lower-triangular.");
-        }
-        var start = System.currentTimeMillis();
-        var deadline = start + timeout;
-        var model = newModel(deadline);
-        var vars = buildVars(costMatrix, model);
-        var cuts = new HashSet<Set<Integer>>();
-
-        buildConstraints(model, minVehicles, maxVehicles, vars);
-
-        // solve
-
-        var result = minimize(model.snapshot());
-
-        for (var iter = 1; result.getState() == OPTIMAL && System.currentTimeMillis() < deadline; iter++) {
-            setTimeout(deadline, model.options);
-            var size = costMatrix.length;
-            var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
-
-            if (addCuts(rccCuts, cuts, model, result, null, "cut: ", vars.length)) {
-                result = minimize(model.snapshot());
-                continue;
-            }
-
-            var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
-
-            if (addCuts(subtourCuts, cuts, model, result, null, "subtour cut: ", vars.length)) {
-                result = minimize(model.snapshot());
-                continue;
-            }
-
-            // no more cuts to add. done.
-
-            List<List<Integer>> cycles;
-            try {
-                cycles = findCycles(size, result);
-            } catch (IllegalArgumentException e) {
-                var relaxed = result.getValue();
-                var substart = System.currentTimeMillis();
-                result = minimize(model);
-                var now = System.currentTimeMillis();
-                System.out.println("[" + toSeconds(now - start) + "s] " + toSeconds(now - substart) +
-                        "s discrete re-solve. LP bound: " + (float) relaxed + ", ILP: " +
-                        (float) result.getValue());
-                continue;
-            }
-
-            System.out.println(iter + " iterations, " + cuts.size() + " cuts, " + cycles.size() + " cycles: " + cycles);
-            var cycleDemands = cycles.stream()
-                    .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
-                    .toList();
-            System.out.println("Cost " + result.getValue() + ", cycle demands: " + cycleDemands);
-
-            return new Result(result.getValue(), cycles);
-        }
-
-        return null;
-    }
-
-    private static Boolean addCuts(Collection<Cut> candidates,
-                                   Set<Set<Integer>> cuts,
-                                   ExpressionsBasedModel model,
-                                   Optimisation.Result result,
-                                   GlobalBounds globalBounds,
-                                   String label,
-                                   int size) {
+    static Boolean addCuts(Collection<Cut> candidates,
+                           Set<Set<Integer>> cuts,
+                           ExpressionsBasedModel model,
+                           Optimisation.Result result,
+                           GlobalBounds globalBounds,
+                           String label,
+                           int size) {
         return candidates.stream().map(cut -> addCut(cuts, model, result, globalBounds, cut, label, size))
                 .reduce(false, (a, b) -> a || b);
     }
@@ -792,10 +725,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return -1;
     }
 
-    private static void buildConstraints(ExpressionsBasedModel model,
-                                         int minVehicles,
-                                         int maxVehicles,
-                                         Variable[][] vars) {
+    static void buildConstraints(ExpressionsBasedModel model,
+                                 int minVehicles,
+                                 int maxVehicles,
+                                 Variable[][] vars) {
         var size = vars.length;
 
         var vcConstr = model.newExpression("vehicleCount").lower(2L * minVehicles).upper(2L * maxVehicles);
@@ -816,7 +749,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
     }
 
-    private static Variable[][] buildVars(BigDecimal[][] costMatrix, ExpressionsBasedModel model) {
+    static Variable[][] buildVars(BigDecimal[][] costMatrix, ExpressionsBasedModel model) {
         var size = costMatrix.length;
         var vars = new Variable[size][size];
 
