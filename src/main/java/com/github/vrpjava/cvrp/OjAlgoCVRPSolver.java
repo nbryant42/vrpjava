@@ -24,6 +24,7 @@ import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import static com.google.common.collect.MoreCollectors.onlyElement;
+import static java.lang.Double.POSITIVE_INFINITY;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
@@ -226,7 +227,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var start = System.currentTimeMillis();
         var deadline = start + timeout;
         var kickstarter = heuristic.doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
-        var bestKnown = kickstarter.objective();
+        var bestKnown = kickstarter == null ? POSITIVE_INFINITY : kickstarter.objective();
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
                 deadline - System.currentTimeMillis());
 
@@ -298,6 +299,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                     // Also, if it's taken us more than X amount of time to get here, then we're working a
                     // hard problem, and it's not a good idea to switch.
                     queue = new PriorityQueue<>(queue);
+                    System.out.println("Switching to best-first search.");
                 }
                 System.out.println("[" + toSeconds(elapsed) + "s]: New incumbent. Bounds now " +
                         (float) lb + '/' + (float) ub + " (" +
