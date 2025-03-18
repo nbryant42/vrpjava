@@ -40,14 +40,16 @@ class OjAlgoCVRPSolverTest {
      * <a href="https://github.com/IBMDecisionOptimization/Decision-Optimization-with-CPLEX-samples/blob/master/Vehicle-routing.pdf">here</a>.
      */
     @Test
-    @Disabled
     void eil33() throws IOException {
+        var solver = new OjAlgoCVRPSolver();
+        solver.setBestFirstMillis(60_000L); // overriding here because I think JaCoCo slows tests down
+
         assertEquals(new Result(837.67155201, List.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
                         List.of(0, 30, 14, 31))),
-                doTestEil33(Integer.MAX_VALUE, 120_000L));
+                doTestEil33(Integer.MAX_VALUE, false, 120_000L, 8000, solver));
     }
 
     // takes 3-4 seconds
@@ -159,6 +161,10 @@ class OjAlgoCVRPSolverTest {
     }
 
     private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity) throws IOException {
+        return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, new OjAlgoCVRPSolver());
+    }
+
+    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity, OjAlgoCVRPSolver solver) throws IOException {
         var vrp = TsplibArchive.loadVrpInstance("eil33.vrp");
         var dim = min(vrp.dimension(), limit);
         var costs = new BigDecimal[dim][dim];
@@ -183,7 +189,6 @@ class OjAlgoCVRPSolverTest {
             }
         }
 
-        var solver = new OjAlgoCVRPSolver();
         var capacity = BigDecimal.valueOf(vehicleCapacity);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
