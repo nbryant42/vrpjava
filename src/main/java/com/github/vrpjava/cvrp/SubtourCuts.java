@@ -26,7 +26,7 @@ class SubtourCuts {
                 .toList();
     }
 
-    static List<Integer> formatCut(Collection<Integer> subset) {
-        return subset.stream().sorted().filter(t -> t != 0).toList();
+    static String formatCut(Collection<Integer> subset) {
+        return "cut: " + subset.stream().sorted().filter(t -> t != 0).toList();
     }
 }

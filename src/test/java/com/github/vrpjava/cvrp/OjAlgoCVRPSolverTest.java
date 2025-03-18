@@ -1,7 +1,7 @@
 package com.github.vrpjava.cvrp;
 
-import io.github.lmores.tsplib.TsplibArchive;
 import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.GlobalBounds;
+import io.github.lmores.tsplib.TsplibArchive;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -13,15 +13,16 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.stream.IntStream;
 
+import static com.github.vrpjava.Util.setUpHardware;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
 import static java.lang.Math.min;
 import static java.lang.Math.pow;
 import static java.lang.Math.sqrt;
 import static java.math.BigDecimal.ZERO;
-import static com.github.vrpjava.cvrp.CVRPSolver.Result;
-import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
-import static com.github.vrpjava.Util.setUpHardware;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.ojalgo.optimisation.Optimisation.State.UNEXPLORED;
 
 class OjAlgoCVRPSolverTest {
     @BeforeAll
@@ -53,8 +54,16 @@ class OjAlgoCVRPSolverTest {
     @Test
     @Disabled
     void eil33_boundsOnly() throws IOException {
-        var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, 1000L * 60L * 60L);
-        assertEquals(835.227782375, mr.getResult().getValue());
+        var timeout = 1000L * 60L * 60L;
+        var deadline = System.currentTimeMillis() + timeout;
+        var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, timeout);
+        assertEquals(835.227782375, mr.getResult(deadline).getValue());
+    }
+
+    @Test
+    void eil33_boundsOnly_timeout() throws IOException {
+        var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, 0L);
+        assertEquals(UNEXPLORED, mr.getResult(System.currentTimeMillis()).getState());
     }
 
     @Test
@@ -83,8 +92,10 @@ class OjAlgoCVRPSolverTest {
     @Test
     @Disabled
     void eil33_moreVehicles_boundsOnly() throws IOException {
-        var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, 1000L * 60L * 60L, 4000);
-        assertEquals(1430.6774874709083, mr.getResult().getValue());
+        var timeout = 1000L * 60L * 60L;
+        var deadline = System.currentTimeMillis() + timeout;
+        var mr = (GlobalBounds) doTestEil33(Integer.MAX_VALUE, true, timeout, 4000);
+        assertEquals(1430.6774874709083, mr.getResult(deadline).getValue());
     }
 
     @Test
@@ -109,8 +120,10 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     void eil33_reduced_boundsOnly() throws IOException {
-        var mr = (GlobalBounds) doTestEil33(17, true, 1000L * 60L * 60L);
-        assertEquals(422.810195025, mr.getResult().getValue());
+        var timeout = 1000L * 60L * 60L;
+        var deadline = System.currentTimeMillis() + timeout;
+        var mr = (GlobalBounds) doTestEil33(17, true, timeout);
+        assertEquals(422.810195025, mr.getResult(deadline).getValue());
     }
 
     // takes about 2.5s w/ naive code; 1.5s now
@@ -174,7 +187,8 @@ class OjAlgoCVRPSolverTest {
         var capacity = BigDecimal.valueOf(vehicleCapacity);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
-        var result = boundsOnly ? solver.initBounds(minVehicles, dim - 1, capacity, demands, costs, timeoutMillis) :
+        var result = boundsOnly ?
+                solver.initBounds(minVehicles, dim - 1, capacity, demands, costs, start + timeoutMillis) :
                 solver.solve(minVehicles, dim - 1, capacity, demands, costs, timeoutMillis);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");

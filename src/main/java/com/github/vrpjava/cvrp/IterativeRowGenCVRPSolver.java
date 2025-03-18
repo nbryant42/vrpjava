@@ -55,14 +55,14 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
             var size = costMatrix.length;
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
-            if (addCuts(rccCuts, cuts, model, result, null, "cut: ", vars.length)) {
+            if (addCuts(rccCuts, cuts, model, result, null, vars.length)) {
                 result = minimize(model.snapshot());
                 continue;
             }
 
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, null, "subtour cut: ", vars.length)) {
+            if (addCuts(subtourCuts, cuts, model, result, null, vars.length)) {
                 result = minimize(model.snapshot());
                 continue;
             }

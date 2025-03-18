@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static com.github.vrpjava.Util.isLowerTriangular;
 import static com.github.vrpjava.Util.newModel;
 import static com.github.vrpjava.Util.setTimeout;
 import static com.github.vrpjava.cvrp.CutCandidates.round;
@@ -77,12 +76,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
 
         private static int alpha(Optimisation.Result result) {
-            var alpha = result.get(0).add(ONE);
-            try {
-                return round(alpha).intValueExact();
-            } catch (ArithmeticException e) {
-                throw new ArithmeticException(e.getMessage() + ": " + alpha);
-            }
+            return round(result.get(0).add(ONE)).intValueExact();
         }
     }
 
@@ -99,11 +93,11 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             return model;
         }
 
-        Optimisation.Result getResult() {
+        Optimisation.Result getResult(long deadline) {
             if (result == null) {
                 // TODO although the global lower bound CAN change during a run, it seems rare. Maybe drop this
                 // re-solve and just hold it constant?
-                result = minimize(model);
+                result = minimize(model, deadline);
             }
             return result;
         }
@@ -118,8 +112,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                             BigDecimal vehicleCapacity,
                             BigDecimal[] demands,
                             BigDecimal[][] costMatrix,
-                            long timeout) {
-        var deadline = System.currentTimeMillis() + timeout;
+                            long deadline) {
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
 
@@ -135,23 +128,21 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                                     GlobalBounds globalBounds,
                                                     long deadline) {
         //var iter = 1;
-        setTimeout(deadline, model.options);
-        var result = minimize(model);
+        var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        while (result.getState() == OPTIMAL && System.currentTimeMillis() < deadline) {
-            setTimeout(deadline, model.options);
+        while (result.getState() == OPTIMAL) {
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
-            if (addCuts(rccCuts, cuts, model, result, globalBounds, "cut: ", size)) {
-                result = minimize(model);
+            if (addCuts(rccCuts, cuts, model, result, globalBounds, size)) {
+                result = minimize(model, deadline);
                 continue;
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, globalBounds, "subtour cut: ", size)) {
-                result = minimize(model);
+            if (addCuts(subtourCuts, cuts, model, result, globalBounds, size)) {
+                result = minimize(model, deadline);
                 continue;
             }
 
@@ -176,8 +167,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                                         GlobalBounds globalBounds,
                                                         long deadline) {
         //var iter = 1;
-        setTimeout(deadline, model.options);
-        var result = minimize(model);
+        var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
@@ -186,12 +176,11 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 // probably infeasible. handle this properly.
                 return result;
             }
-            setTimeout(deadline, model.options);
 
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, globalBounds, "subtour cut: ", size)) {
-                result = minimize(model);
+            if (addCuts(subtourCuts, cuts, model, result, globalBounds, size)) {
+                result = minimize(model, deadline);
                 continue;
             }
 
@@ -228,14 +217,13 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var deadline = start + timeout;
         var kickstarter = heuristic.doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
         var bestKnown = kickstarter == null ? POSITIVE_INFINITY : kickstarter.objective();
-        var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
-                deadline - System.currentTimeMillis());
+        var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, deadline);
 
-        if (globalBounds.getResult().getState() != OPTIMAL) {
+        if (globalBounds.getResult(deadline).getState() != OPTIMAL) {
             return buildResult(demands, null, kickstarter, 0, globalBounds, bestKnown);
         }
 
-        logHeuristicBounds(start, globalBounds.getResult().getValue(), bestKnown);
+        logHeuristicBounds(start, globalBounds.getResult(deadline).getValue(), bestKnown);
         logCutCount(globalBounds);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
@@ -249,7 +237,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         Optimisation.Result incumbent = null;
 
         // the root node has no variables fixed.
-        queue.add(new Node(globalBounds.getResult().getValue(), ZERO, Map.of()));
+        queue.add(new Node(globalBounds.getResult(deadline).getValue(), ZERO, Map.of()));
 
         for (Node node; deadline > System.currentTimeMillis() && (node = queue.poll()) != null; nodes++) {
             // double-check the parent node's bound before we go any further; the best-known solution may have
@@ -289,8 +277,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 queueNode(node, ub, k, other, gap, queue);
                 queueNode(node, ub, k, closest, gap, queue);
             } else if (ub < bestKnown) {
-                double lb = globalBounds.getResult().getValue();
-                double ratio = lb / ub;
+                var globalBoundsResult = globalBounds.getResult(deadline);
+                var lb = globalBoundsResult.getValue();
+                var ratio = lb / ub;
                 var elapsed = System.currentTimeMillis() - start;
 
                 if (!(queue instanceof PriorityQueue<Node>) && ratio > bestFirstRatio && elapsed < bestFirstMillis) {
@@ -308,7 +297,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 incumbent = nodeResult;
                 bestKnown = ub;
 
-                if (ub <= lb) {
+                if (ub <= lb || globalBoundsResult.getState() != OPTIMAL) {
                     break;
                 }
             }
@@ -375,9 +364,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                            ExpressionsBasedModel model,
                            Optimisation.Result result,
                            GlobalBounds globalBounds,
-                           String label,
                            int size) {
-        return candidates.stream().map(cut -> addCut(cuts, model, result, globalBounds, cut, label, size))
+        return candidates.stream().map(cut -> addCut(cuts, model, result, globalBounds, cut, size))
                 .reduce(false, (a, b) -> a || b);
     }
 
@@ -386,13 +374,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                   Optimisation.Result result,
                                   GlobalBounds globalBounds,
                                   Cut cut,
-                                  String label,
                                   int size) {
         var subset = cut.subset();
         subset.remove(0);
 
         if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
-            addCut(size, model, globalBounds, subset, cut.minVehicles(), label + formatCut(subset));
+            addCut(size, model, globalBounds, subset, cut.minVehicles());
             return true;
         }
         return false;
@@ -404,8 +391,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                ExpressionsBasedModel model,
                                GlobalBounds globalBounds,
                                Set<Integer> subset,
-                               int minVehicles,
-                               String name) {
+                               int minVehicles) {
+        var name = formatCut(subset);
         var min = minVehicles * 2L;
 
         //System.out.println("Adding " + name + " >= " + min);
@@ -454,12 +441,22 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return total.compareTo(BigDecimal.valueOf(min)) < 0;
     }
 
+    /**
+     * @deprecated use {@link #minimize(ExpressionsBasedModel, long)}
+     */
+    @SuppressWarnings("DeprecatedIsStillUsed")
+    @Deprecated
     static Optimisation.Result minimize(ExpressionsBasedModel model) {
         // var start = System.currentTimeMillis();
         return model.minimise();
 
         //System.out.println("Elapsed: " + (System.currentTimeMillis() - start) + "ms; " + result);
         //return result;
+    }
+
+    private static Optimisation.Result minimize(ExpressionsBasedModel model, long deadline) {
+        setTimeout(deadline, model.options);
+        return minimize(model);
     }
 
     private record Target(int node, BigDecimal count) {
