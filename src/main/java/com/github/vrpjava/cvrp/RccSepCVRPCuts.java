@@ -61,7 +61,7 @@ class RccSepCVRPCuts {
         var candidates = new CutCandidates(size, parentResult);
         var result = buildSubProblem(vehicleCapacity, demands, parentResult, candidates, deadline).maximise();
 
-        if (result.getState() != Optimisation.State.OPTIMAL) {
+        if (!result.getState().isOptimal()) {
             return null;
         }
 

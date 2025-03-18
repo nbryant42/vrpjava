@@ -131,7 +131,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        for (Set<Cut> rccCuts; result.getState() == OPTIMAL &&
+        for (Set<Cut> rccCuts; result.getState().isOptimal() &&
                 (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
             if (addCuts(rccCuts, cuts, model, result, globalBounds, size)) {
                 result = minimize(model, deadline);
@@ -169,7 +169,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        while (result.getState() == OPTIMAL) {
+        while (result.getState().isOptimal()) {
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
             if (addCuts(subtourCuts, cuts, model, result, globalBounds, size)) {
@@ -212,7 +212,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var bestKnown = kickstarter == null ? POSITIVE_INFINITY : kickstarter.objective();
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, deadline);
 
-        if (globalBounds.getResult(deadline).getState() != OPTIMAL) {
+        if (!globalBounds.getResult(deadline).getState().isOptimal()) {
             return buildResult(demands, null, kickstarter, 0, globalBounds, bestKnown);
         }
 
@@ -244,8 +244,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, globalBounds, deadline);
             double ub = nodeResult.getValue();
 
-            // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or a timeout.
-            if (nodeResult.getState() != OPTIMAL || nodeResult.getValue() >= bestKnown) {
+            // if it's not optimal, it's probably INFEASIBLE, with nonsense variables, or a timeout.
+            if (!nodeResult.getState().isOptimal() || nodeResult.getValue() >= bestKnown) {
                 continue; // fathom the node
             }
 
@@ -290,7 +290,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 incumbent = nodeResult;
                 bestKnown = ub;
 
-                if (ub <= lb || globalBoundsResult.getState() != OPTIMAL) {
+                if (ub <= lb || !globalBoundsResult.getState().isOptimal()) {
                     break;
                 }
             }

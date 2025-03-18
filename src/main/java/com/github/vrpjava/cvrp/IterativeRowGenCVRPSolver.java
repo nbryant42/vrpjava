@@ -50,7 +50,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
 
         var result = minimize(model.snapshot());
 
-        for (var iter = 1; result.getState() == OPTIMAL && System.currentTimeMillis() < deadline; iter++) {
+        for (var iter = 1; result.getState().isOptimal() && System.currentTimeMillis() < deadline; iter++) {
             setTimeout(deadline, model.options);
             var size = costMatrix.length;
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
