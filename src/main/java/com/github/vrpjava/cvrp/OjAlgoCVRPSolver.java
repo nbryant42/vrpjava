@@ -413,7 +413,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 for (var col = 0; col < row; col++) {
                     if (target == row && !subset.contains(col) ||
                             target == col && !subset.contains(row)) {
-                        cut.set(getVariable(row, col, model), ONE);
+                        cut.set(getVariable_noFlip(row, col, model), ONE);
                     }
                 }
             }
@@ -432,7 +432,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 for (var col = 0; col < row; col++) {
                     if (target == row && !subset.contains(col) ||
                             target == col && !subset.contains(row)) {
-                        total = total.add(getVariable(row, col, result));
+                        total = total.add(getVariable_noFlip(row, col, result));
                     }
                 }
             }
@@ -486,36 +486,22 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
      * and flip row/col if necessary to ensure symmetry for a packed lower-triangular matrix.
      */
     static BigDecimal getVariable(int row, int col, Optimisation.Result result) {
-        if (row == col || row < 0) {
-            throw new IllegalArgumentException(Integer.toString(row));
-        }
-        if (col < 0) {
-            throw new IllegalArgumentException(Integer.toString(col));
-        }
-        if (row < col) {
-            var tmp = col;
-            col = row;
-            row = tmp;
-        }
+        return row < col ? result.get(base(col) + row) : result.get(base(row) + col);
+    }
+
+    /**
+     * Get a variable from the result. This will convert the row/column address to a linear address,
+     * but will NOT flip row/col; use this variant only when you are certain that `row > col`
+     */
+    static BigDecimal getVariable_noFlip(int row, int col, Optimisation.Result result) {
         return result.get(base(row) + col);
     }
 
     /**
      * Get a {@link Variable} from the model. This will convert the row/column address to a linear address,
-     * and flip row/col if necessary to ensure symmetry for a packed lower-triangular matrix.
+     * but will NOT flip row/col; use this variant only when you are certain that `row > col`
      */
-    static Variable getVariable(int row, int col, ExpressionsBasedModel model) {
-        if (row == col || row < 0) {
-            throw new IllegalArgumentException(Integer.toString(row));
-        }
-        if (col < 0) {
-            throw new IllegalArgumentException(Integer.toString(col));
-        }
-        if (row < col) {
-            var tmp = col;
-            col = row;
-            row = tmp;
-        }
+    private static Variable getVariable_noFlip(int row, int col, ExpressionsBasedModel model) {
         return model.getVariable(base(row) + col);
     }
 
@@ -550,18 +536,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 // nontrivial cycle.
                 var previous = 0;
 
-                while (true) {
-                    int nextNode;
-                    try {
-                        nextNode = getNextNode(node, previous, size, result).node();
-                    } catch (IllegalArgumentException e) {
-                        throw new IllegalArgumentException("Current cycle: " + cycle + ". " + e.getMessage());
-                    }
-
-                    if (nextNode == 0) {
-                        break;
-                    }
-
+                for (int nextNode; (nextNode = getNextNode(node, previous, size, result).node()) != 0; ) {
                     seen.add(nextNode);
                     remaining.remove(nextNode);
                     cycle.add(nextNode);

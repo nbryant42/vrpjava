@@ -19,10 +19,10 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.IntSupplier;
 
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.getVariable_noFlip;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
-import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.getVariable;
 import static org.ojalgo.optimisation.integer.NodeKey.FIFO_SEQUENCE;
 import static org.ojalgo.optimisation.integer.NodeKey.LARGE_DISPLACEMENT;
 import static org.ojalgo.optimisation.integer.NodeKey.LIFO_SEQUENCE;
@@ -122,7 +122,7 @@ class RccSepCVRPCuts {
                                           int j,
                                           Variable[] gammaRow,
                                           Variable[] delta) {
-        var v = getVariable(i, j, parentResult);
+        var v = getVariable_noFlip(i, j, parentResult);
 
         if (v.signum() != 0) {
             var thisGamma = model.newVariable("gamma" + i + "_" + j).lower(ZERO).weight(v);
