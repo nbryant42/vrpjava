@@ -33,7 +33,6 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.ojalgo.optimisation.Optimisation.State.FAILED;
 import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
 /**
@@ -132,9 +131,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        while (result.getState() == OPTIMAL) {
-            var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
-
+        for (Set<Cut> rccCuts; result.getState() == OPTIMAL &&
+                (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
             if (addCuts(rccCuts, cuts, model, result, globalBounds, size)) {
                 result = minimize(model, deadline);
                 continue;
@@ -171,12 +169,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        while (System.currentTimeMillis() <= deadline) {
-            if (result.getState() != OPTIMAL) {
-                // probably infeasible. handle this properly.
-                return result;
-            }
-
+        while (result.getState() == OPTIMAL) {
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
             if (addCuts(subtourCuts, cuts, model, result, globalBounds, size)) {
@@ -195,7 +188,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
         //System.out.println(iter + " iterations, " + cuts.size() + " cuts");
 
-        return result.withState(FAILED); // timed out.
+        return result; // infeasible or timed out.
     }
 
     private record Node(double bound, BigDecimal gap, Map<Integer, BigDecimal> vars) implements Comparable<Node> {
@@ -251,7 +244,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, globalBounds, deadline);
             double ub = nodeResult.getValue();
 
-            // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or FAILED due to timeout.
+            // if it's not OPTIMAL, it's probably INFEASIBLE, with nonsense variables, or a timeout.
             if (nodeResult.getState() != OPTIMAL || nodeResult.getValue() >= bestKnown) {
                 continue; // fathom the node
             }
@@ -359,7 +352,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         });
     }
 
-    static Boolean addCuts(Collection<Cut> candidates,
+    static boolean addCuts(Collection<Cut> candidates,
                            Set<Set<Integer>> cuts,
                            ExpressionsBasedModel model,
                            Optimisation.Result result,
@@ -581,13 +574,11 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 // nontrivial cycle.
                 do {
                     var node = stack.removeLast();
-
-                    if (node != 0) {
-                        seen.add(node);
-                        cycle.add(node);
-                        stack.addAll(getNextNodes(cycle, node, size, result));
-                        remaining.remove(node);
-                    }
+                    seen.add(node);
+                    cycle.add(node);
+                    arcsFrom(node, size, result).stream().map(Target::node).filter(n -> !cycle.contains(n))
+                            .forEach(stack::add);
+                    remaining.remove(node);
                 } while (!stack.isEmpty());
             }
 
@@ -675,10 +666,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             default -> throw new IllegalArgumentException("more than 1 arcs from " + node + " excluding " + previous +
                     ": " + nextNodes);
         };
-    }
-
-    private static List<Integer> getNextNodes(Set<Integer> cycle, int node, int size, Optimisation.Result result) {
-        return arcsFrom(node, size, result).stream().map(Target::node).filter(n -> !cycle.contains(n)).toList();
     }
 
     private static Target pickNode(int node, int size, Optimisation.Result result) {

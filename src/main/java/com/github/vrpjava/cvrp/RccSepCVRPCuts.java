@@ -49,6 +49,10 @@ class RccSepCVRPCuts {
     // tunable. 0.5 is used in the paper. we use this as an .upper(), so it's negated vs. the paper.
     private static final BigDecimal EPSILON1 = BigDecimal.valueOf(-0.5);
 
+    /**
+     * @return a set of generated cuts, or null when the subproblem cannot be solved to optimality
+     * (which should only happen due to timeout)
+     */
     static Set<Cut> generate(BigDecimal vehicleCapacity,
                              BigDecimal[] demands,
                              Optimisation.Result parentResult,
@@ -56,6 +60,10 @@ class RccSepCVRPCuts {
         int size = demands.length;
         var candidates = new CutCandidates(size, parentResult);
         var result = buildSubProblem(vehicleCapacity, demands, parentResult, candidates, deadline).maximise();
+
+        if (result.getState() != Optimisation.State.OPTIMAL) {
+            return null;
+        }
 
         candidates.take(result);
         return candidates.getCuts();

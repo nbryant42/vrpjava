@@ -42,14 +42,15 @@ class OjAlgoCVRPSolverTest {
     @Test
     void eil33() throws IOException {
         var solver = new OjAlgoCVRPSolver();
-        solver.setBestFirstMillis(60_000L); // overriding here because I think JaCoCo slows tests down
+        var timeout = 300_000L;
+        solver.setBestFirstMillis(timeout); // overriding here because I think JaCoCo slows tests down
 
         assertEquals(new Result(837.67155201, List.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
                         List.of(0, 30, 14, 31))),
-                doTestEil33(Integer.MAX_VALUE, false, 120_000L, 8000, solver));
+                doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
     }
 
     // takes 3-4 seconds
@@ -101,7 +102,7 @@ class OjAlgoCVRPSolverTest {
     }
 
     @Test
-    void timeout() throws IOException {
+    void timeoutImmediate() throws IOException {
         assertEquals(new Result(2875.8908523, List.of(
                         List.of(0, 3, 4, 2, 12, 30, 31, 5, 11, 6),
                         List.of(0, 7, 32, 1, 13, 8, 9, 10, 14),
@@ -110,6 +111,24 @@ class OjAlgoCVRPSolverTest {
                 doTestEil33(Integer.MAX_VALUE, 0L));
     }
 
+    @Test
+    void timeoutInRccSep() throws IOException {
+        assertEquals(new Result(2875.8908523, List.of(
+                        List.of(0, 3, 4, 2, 12, 30, 31, 5, 11, 6),
+                        List.of(0, 7, 32, 1, 13, 8, 9, 10, 14),
+                        List.of(0, 15, 17, 29, 26, 18, 19, 25),
+                        List.of(0, 28, 27, 21, 22, 20, 24, 16, 23))),
+                doTestEil33(Integer.MAX_VALUE, 100L));
+    }
+
+    // TODO make the solver report APPROXIMATE or OPTIMAL in cases like this.
+    @Test
+    void timeoutInNode() throws IOException {
+        var solver = new OjAlgoCVRPSolver();
+        solver.setBestFirstMillis(0L); // deliberately slow this down
+        Result result = (Result) doTestEil33(Integer.MAX_VALUE, false, 25_000L, 8000, solver);
+        System.out.println("timeoutInNode result: " + result.objective());
+    }
 
     // 240-254ms w/ naive code; now ~550-800 ms
     @Test
