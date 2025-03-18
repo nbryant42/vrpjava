@@ -18,6 +18,7 @@ import static java.lang.Math.min;
 import static java.math.BigDecimal.ZERO;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("deprecation")
 class IterativeRowGenCVRPSolverTest {
     @BeforeAll
     static void setUp() {
@@ -61,7 +62,7 @@ class IterativeRowGenCVRPSolverTest {
             }
         }
 
-        var solver = new OjAlgoCVRPSolver();
+        var solver = new IterativeRowGenCVRPSolver();
         var capacity = BigDecimal.valueOf(val);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
