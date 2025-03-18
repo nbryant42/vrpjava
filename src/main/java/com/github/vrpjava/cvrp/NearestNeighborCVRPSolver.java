@@ -79,7 +79,9 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
             objective = objective.add(lookup(0, r, costMatrix).multiply(TWO));
         }
 
-        return cycles.size() > maxVehicles ? null : new Result(objective.doubleValue(), cycles);
+        return cycles.size() > maxVehicles ?
+                new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of()) :
+                new Result(Result.State.HEURISTIC, objective.doubleValue(), cycles);
     }
 
     // Find the nearest neighbor that satisfies all the constraints.

@@ -15,7 +15,6 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.toSeconds;
 import static java.math.BigDecimal.ZERO;
-import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
 /**
  * <p>
@@ -55,6 +54,9 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
             var size = costMatrix.length;
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
+            if (rccCuts == null) {
+                return new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of());
+            }
             if (addCuts(rccCuts, cuts, model, result, null, vars.length)) {
                 result = minimize(model.snapshot());
                 continue;
@@ -89,7 +91,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
                     .toList();
             System.out.println("Cost " + result.getValue() + ", cycle demands: " + cycleDemands);
 
-            return new Result(result.getValue(), cycles);
+            return new Result(Result.State.OPTIMAL, result.getValue(), cycles);
         }
 
         return null;

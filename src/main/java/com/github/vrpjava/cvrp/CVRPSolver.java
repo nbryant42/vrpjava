@@ -1,6 +1,7 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.Util;
+import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,12 +34,60 @@ public abstract class CVRPSolver {
     /**
      * Record type to hold a solution to the problem.
      *
+     * @param state     reports status, whether {@link State#OPTIMAL}, {@link State#FEASIBLE}, etc.
      * @param objective the total travel cost (or distance) of the solution
      * @param cycles    a list of "cycles" for each vehicle, so called because they represent a Hamiltonian Cycle.
      *                  Each cycle is a list of locations visited by the vehicle, represented as integer array indexes
      *                  into the corresponding problem spec, starting with zero (the depot.)
      */
-    public record Result(double objective, List<List<Integer>> cycles) {
+    public record Result(State state, double objective, List<List<Integer>> cycles) {
+        /**
+         * These states generally have about the same meaning as in {@link Optimisation.State}, except we have an
+         * additional {@link #HEURISTIC} status which would be equivalent to {@link Optimisation.State#FEASIBLE}
+         */
+        public enum State {
+            /**
+             * The heuristic couldn't find a solution,
+             * and we timed out before even starting the branch-and-bound search.
+             */
+            UNEXPLORED(false),
+            /**
+             * The heuristic found a feasible solution, but branch-and-bound found nothing better.
+             */
+            HEURISTIC(true),
+            /**
+             * Branch-and-bound found a solution, but it may not be optimal.
+             */
+            FEASIBLE(true),
+            /**
+             * We solved the problem to optimality!
+             */
+            OPTIMAL(true),
+            /**
+             * The problem is believed to be infeasible.
+             */
+            INFEASIBLE(false),
+            /**
+             * The heuristic couldn't find a solution, and neither could branch-and-bound
+             * (probably timeout, possibly infeasible)
+             */
+            ERROR(false);
+
+            private final boolean feasible;
+
+            State(boolean feasible) {
+                this.feasible = feasible;
+            }
+
+            /**
+             * {@link #HEURISTIC} or {@link #FEASIBLE} are both considered feasible solutions.
+             *
+             * @return true if this state is one of these.
+             */
+            public boolean isFeasible() {
+                return feasible;
+            }
+        }
     }
 
     /**

@@ -10,7 +10,6 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class NearestNeighborCVRPSolverTest {
     @Test
@@ -24,20 +23,21 @@ class NearestNeighborCVRPSolverTest {
         var solver = new NearestNeighborCVRPSolver();
 
         // capacity constraint
-        assertEquals(new Result(4.0, List.of(List.of(0, 1), List.of(0, 2))),
+        assertEquals(new Result(Result.State.HEURISTIC, 4.0, List.of(List.of(0, 1), List.of(0, 2))),
                 solver.doSolve(1, 2, ONE, demands, costs, 0L));
 
         // constraints non-binding
-        assertEquals(new Result(3.0, List.of(List.of(0, 1, 2))),
+        assertEquals(new Result(Result.State.HEURISTIC, 3.0, List.of(List.of(0, 1, 2))),
                 solver.doSolve(1, 2, TWO, demands, costs, 0L));
 
         // min vehicles constraint
-        assertEquals(new Result(4.0, List.of(List.of(0, 1), List.of(0, 2))),
+        assertEquals(new Result(Result.State.HEURISTIC, 4.0, List.of(List.of(0, 1), List.of(0, 2))),
                 solver.doSolve(2, 2, TWO, demands, costs, 0L));
 
         // max vehicles constraint (no solution)
         // (the problem is not well-defined here -- maybe we should just drop the maxVehicles parameter)
-        assertNull(solver.doSolve(1, 1, ONE, demands, costs, 0L));
+        assertEquals(new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of()),
+                solver.doSolve(1, 1, ONE, demands, costs, 0L));
 
     }
 }

@@ -33,7 +33,7 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
+import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
 /**
  * Solver for the Capacitated Vehicle Routing Problem (CVRP).
@@ -209,11 +209,24 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var start = System.currentTimeMillis();
         var deadline = start + timeout;
         var kickstarter = heuristic.doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout);
-        var bestKnown = kickstarter == null ? POSITIVE_INFINITY : kickstarter.objective();
         var globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, deadline);
+        double bestKnown;
 
-        if (!globalBounds.getResult(deadline).getState().isOptimal()) {
-            return buildResult(demands, null, kickstarter, 0, globalBounds, bestKnown);
+        if (kickstarter.state() != Result.State.HEURISTIC) {
+            bestKnown = POSITIVE_INFINITY;
+
+            if (!globalBounds.getResult(deadline).getState().isOptimal()) {
+                var myState = globalBounds.getResult(deadline).getState() == INFEASIBLE ? Result.State.INFEASIBLE :
+                        Result.State.UNEXPLORED;
+
+                return buildResult(myState, demands, null, kickstarter, 0, globalBounds, bestKnown);
+            }
+        } else {
+            bestKnown = kickstarter.objective();
+
+            if (!globalBounds.getResult(deadline).getState().isOptimal()) {
+                return buildResult(Result.State.HEURISTIC, demands, null, kickstarter, 0, globalBounds, bestKnown);
+            }
         }
 
         logHeuristicBounds(start, globalBounds.getResult(deadline).getValue(), bestKnown);
@@ -227,12 +240,21 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
         var queue = Collections.asLifoQueue(new ArrayDeque<Node>());
         var nodes = 0;
+        var myState = kickstarter.state();
         Optimisation.Result incumbent = null;
 
         // the root node has no variables fixed.
         queue.add(new Node(globalBounds.getResult(deadline).getValue(), ZERO, Map.of()));
 
-        for (Node node; deadline > System.currentTimeMillis() && (node = queue.poll()) != null; nodes++) {
+        for (; deadline > System.currentTimeMillis(); nodes++) {
+            var node = queue.poll();
+
+            if (node == null) {
+                if (myState == Result.State.FEASIBLE) {
+                    myState = Result.State.OPTIMAL;
+                }
+                break;
+            }
             // double-check the parent node's bound before we go any further; the best-known solution may have
             // improved since it was queued.
             if (node.bound() >= bestKnown) {
@@ -289,18 +311,28 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
                 incumbent = nodeResult;
                 bestKnown = ub;
+                myState = Result.State.FEASIBLE;
 
-                if (ub <= lb || !globalBoundsResult.getState().isOptimal()) {
+                if (ub <= lb) {
+                    myState = Result.State.OPTIMAL;
+                    break;
+                }
+                if (!globalBoundsResult.getState().isOptimal()) {
                     break;
                 }
             }
         }
 
-        return buildResult(demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
+        return buildResult(myState, demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
     }
 
-    private static Result buildResult(BigDecimal[] demands, Optimisation.Result incumbent, Result kickstarter,
-                                      int nodes, GlobalBounds globalBounds, double bestKnown) {
+    private static Result buildResult(Result.State myState,
+                                      BigDecimal[] demands,
+                                      Optimisation.Result incumbent,
+                                      Result kickstarter,
+                                      int nodes,
+                                      GlobalBounds globalBounds,
+                                      double bestKnown) {
         var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
 
         System.out.println(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
@@ -310,7 +342,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         System.out.println("Cycle demands: " + cycleDemands);
         logCutCount(globalBounds);
 
-        return new Result(bestKnown, cycles);
+        return new Result(myState, bestKnown, cycles);
     }
 
     private static void logHeuristicBounds(long start, double lb, double ub) {

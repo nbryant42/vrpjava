@@ -69,7 +69,7 @@ class IterativeRowGenCVRPSolverTest {
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 
-        assertEquals(new CVRPSolver.Result(837.67155201, List.of(
+        assertEquals(new CVRPSolver.Result(CVRPSolver.Result.State.OPTIMAL, 837.67155201, List.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
