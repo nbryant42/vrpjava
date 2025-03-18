@@ -264,10 +264,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
             var nodeResult = weakUpdateBounds(vehicleCapacity, demands, nodeModel, globalBounds, deadline);
-            double ub = nodeResult.getValue();
+            var ub = nodeResult.getValue();
 
             // if it's not optimal, it's probably INFEASIBLE, with nonsense variables, or a timeout.
-            if (!nodeResult.getState().isOptimal() || nodeResult.getValue() >= bestKnown) {
+            if (!nodeResult.getState().isOptimal() || ub >= bestKnown) {
                 continue; // fathom the node
             }
 
@@ -291,7 +291,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                 // queue the closest gap last, so it's on top of stack (if it's a LIFO queue)
                 queueNode(node, ub, k, other, gap, queue);
                 queueNode(node, ub, k, closest, gap, queue);
-            } else if (ub < bestKnown) {
+            } else {
                 var globalBoundsResult = globalBounds.getResult(deadline);
                 var lb = globalBoundsResult.getValue();
                 var ratio = lb / ub;
