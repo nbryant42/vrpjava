@@ -1,5 +1,6 @@
 package com.github.vrpjava.cvrp;
 
+import org.ojalgo.netio.BasicLogger;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
@@ -56,6 +57,8 @@ import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
+    private boolean debug;
+
     /**
      * Default constructor.
      */
@@ -149,7 +152,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
 
         // done or timed out.
-        //System.out.println(iter + " iterations, " + cuts.size() + " cuts");
+        //debug(iter + " iterations, " + cuts.size() + " cuts");
         return result;
     }
 
@@ -186,7 +189,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                     result;
         }
 
-        //System.out.println(iter + " iterations, " + cuts.size() + " cuts");
+        //debug(iter + " iterations, " + cuts.size() + " cuts");
 
         return result; // infeasible or timed out.
     }
@@ -303,9 +306,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                     // Also, if it's taken us more than X amount of time to get here, then we're working a
                     // hard problem, and it's not a good idea to switch.
                     queue = new PriorityQueue<>(queue);
-                    System.out.println("Switching to best-first search.");
+                    debug("Switching to best-first search.");
                 }
-                System.out.println("[" + toSeconds(elapsed) + "s]: New incumbent. Bounds now " +
+                debug("[" + toSeconds(elapsed) + "s]: New incumbent. Bounds now " +
                         (float) lb + '/' + (float) ub + " (" +
                         BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
 
@@ -326,27 +329,33 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return buildResult(myState, demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
     }
 
-    private static Result buildResult(Result.State myState,
-                                      BigDecimal[] demands,
-                                      Optimisation.Result incumbent,
-                                      Result kickstarter,
-                                      int nodes,
-                                      GlobalBounds globalBounds,
-                                      double bestKnown) {
+    private void debug(String s) {
+        if (debug) {
+            BasicLogger.debug(s);
+        }
+    }
+
+    private Result buildResult(Result.State myState,
+                               BigDecimal[] demands,
+                               Optimisation.Result incumbent,
+                               Result kickstarter,
+                               int nodes,
+                               GlobalBounds globalBounds,
+                               double bestKnown) {
         var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
 
-        System.out.println(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
+        debug(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
         var cycleDemands = cycles.stream()
                 .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                 .toList();
-        System.out.println("Cycle demands: " + cycleDemands);
+        debug("Cycle demands: " + cycleDemands);
         logCutCount(globalBounds);
 
         return new Result(myState, bestKnown, cycles);
     }
 
-    private static void logHeuristicBounds(long start, double lb, double ub) {
-        System.out.println("[" + toSeconds(System.currentTimeMillis() - start) +
+    private void logHeuristicBounds(long start, double lb, double ub) {
+        debug("[" + toSeconds(System.currentTimeMillis() - start) +
                 "s]: Bounds init complete. Bounds from heuristic: " +
                 (float) lb + '/' + (float) ub + " (" +
                 BigDecimal.valueOf((lb / ub) * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
@@ -356,9 +365,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return BigDecimal.valueOf(val).divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
     }
 
-    private static void logCutCount(GlobalBounds globalBounds) {
+    private void logCutCount(GlobalBounds globalBounds) {
         var count = globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
-        System.out.println("Currently " + count + " cuts.");
+        debug("Currently " + count + " cuts.");
     }
 
     private static void queueNode(Node parent, double ub, Integer k, BigDecimal v, BigDecimal gap, Queue<Node> queue) {
@@ -420,7 +429,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var name = formatCut(subset);
         var min = minVehicles * 2L;
 
-        //System.out.println("Adding " + name + " >= " + min);
+        //debug("Adding " + name + " >= " + min);
 
         addCut(size, model, subset, name, min);
         if (globalBounds != null) {
@@ -466,22 +475,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return total.compareTo(BigDecimal.valueOf(min)) < 0;
     }
 
-    /**
-     * @deprecated use {@link #minimize(ExpressionsBasedModel, long)}
-     */
-    @SuppressWarnings("DeprecatedIsStillUsed")
-    @Deprecated
-    static Optimisation.Result minimize(ExpressionsBasedModel model) {
-        // var start = System.currentTimeMillis();
-        return model.minimise();
-
-        //System.out.println("Elapsed: " + (System.currentTimeMillis() - start) + "ms; " + result);
-        //return result;
-    }
-
-    private static Optimisation.Result minimize(ExpressionsBasedModel model, long deadline) {
+    static Optimisation.Result minimize(ExpressionsBasedModel model, long deadline) {
         setTimeout(deadline, model.options);
-        return minimize(model);
+        return model.minimise();
     }
 
     private record Target(int node, BigDecimal count) {
@@ -831,5 +827,25 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     @SuppressWarnings("unused")
     public void setHeuristic(CVRPSolver heuristic) {
         this.heuristic = heuristic;
+    }
+
+    /**
+     * Get the debug property
+     *
+     * @return true if debug logging is enabled
+     */
+    @SuppressWarnings("unused")
+    public boolean isDebug() {
+        return debug;
+    }
+
+    /**
+     * Set the debug property. If enabled, logging works via ojAlgo's {@link BasicLogger} mechanism.
+     * You can supply a thin wrapper implementation to redirect it to the logging library of your choice.
+     *
+     * @param debug true if debug logging is enabled
+     */
+    public void setDebug(boolean debug) {
+        this.debug = debug;
     }
 }

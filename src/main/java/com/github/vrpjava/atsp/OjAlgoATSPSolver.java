@@ -1,5 +1,6 @@
 package com.github.vrpjava.atsp;
 
+import org.ojalgo.netio.BasicLogger;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
@@ -20,6 +21,8 @@ import static com.github.vrpjava.Util.newModel;
  * Solver for the Asymmetric Travelling Salesman Problem.
  */
 public class OjAlgoATSPSolver extends ATSPSolver {
+    private boolean debug;
+
     /**
      * Default constructor
      */
@@ -42,18 +45,24 @@ public class OjAlgoATSPSolver extends ATSPSolver {
             var result = model.minimise();
             var elapsed = System.currentTimeMillis() - start;
 
-            System.out.println("Elapsed: " + elapsed + "ms; " + result.getState() + " " + result.getValue());
+            debug("Elapsed: " + elapsed + "ms; " + result.getState() + " " + result.getValue());
 
             var cycles = findCycles(costMatrix.length, result);
             var srcOnly = cycles.stream().map(cycle -> cycle.stream().map(Edge::src).toList()).toList();
 
-            System.out.println(srcOnly.size() + " cycles: " + srcOnly);
+            debug(srcOnly.size() + " cycles: " + srcOnly);
 
             if (cycles.size() == 1) {
                 return cycles.getFirst();
             }
 
             addCuts(cycles, model, vars);
+        }
+    }
+
+    private void debug(String s) {
+        if (debug) {
+            BasicLogger.debug(s);
         }
     }
 
@@ -135,5 +144,26 @@ public class OjAlgoATSPSolver extends ATSPSolver {
                 }
             }
         }
+    }
+
+    /**
+     * Get the debug property
+     *
+     * @return true if debug logging is enabled
+     */
+    @SuppressWarnings("unused")
+    public boolean isDebug() {
+        return debug;
+    }
+
+    /**
+     * Set the debug property. If enabled, logging works via ojAlgo's {@link BasicLogger} mechanism.
+     * You can supply a thin wrapper implementation to redirect it to the logging library of your choice.
+     *
+     * @param debug true if debug logging is enabled
+     */
+    @SuppressWarnings("unused")
+    public void setDebug(boolean debug) {
+        this.debug = debug;
     }
 }

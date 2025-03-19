@@ -34,6 +34,12 @@ But what this needs most, right now, is another pair of eyes to review the code.
 Clone the repository, run `./mvnw site`, and point your local browser at `target/site/index.html`.
 Look under Project Reports.
 
+## Running the tests
+
+The test coverage report is off by default because it slows the tests down considerably, so you need to enable the
+`coverage` profile. Run `./mvnw -Pcoverage clean test site`, and point your local browser at `target/site/index.html`.
+Look under Project Reports.
+
 ## Building the JAR
 
 `./mvnw package` and look in the `target/` directory.

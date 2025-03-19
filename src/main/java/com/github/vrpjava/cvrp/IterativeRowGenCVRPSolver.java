@@ -1,5 +1,7 @@
 package com.github.vrpjava.cvrp;
 
+import org.ojalgo.netio.BasicLogger;
+
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
@@ -7,7 +9,6 @@ import java.util.Set;
 
 import static com.github.vrpjava.Util.isLowerTriangular;
 import static com.github.vrpjava.Util.newModel;
-import static com.github.vrpjava.Util.setTimeout;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.addCuts;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildConstraints;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildVars;
@@ -26,8 +27,11 @@ import static java.math.BigDecimal.ZERO;
  * at all within a reasonable timeframe.
  * </p>
  */
+@SuppressWarnings("DeprecatedIsStillUsed")
 @Deprecated
 class IterativeRowGenCVRPSolver extends CVRPSolver {
+    private boolean debug;
+
     protected Result doSolve(int minVehicles,
                              int maxVehicles,
                              BigDecimal vehicleCapacity,
@@ -47,10 +51,9 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
 
         // solve
 
-        var result = minimize(model.snapshot());
+        var result = minimize(model.snapshot(), deadline);
 
         for (var iter = 1; result.getState().isOptimal() && System.currentTimeMillis() < deadline; iter++) {
-            setTimeout(deadline, model.options);
             var size = costMatrix.length;
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
@@ -58,14 +61,14 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
                 return new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of());
             }
             if (addCuts(rccCuts, cuts, model, result, null, vars.length)) {
-                result = minimize(model.snapshot());
+                result = minimize(model.snapshot(), deadline);
                 continue;
             }
 
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
             if (addCuts(subtourCuts, cuts, model, result, null, vars.length)) {
-                result = minimize(model.snapshot());
+                result = minimize(model.snapshot(), deadline);
                 continue;
             }
 
@@ -77,23 +80,50 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
             } catch (IllegalArgumentException e) {
                 var relaxed = result.getValue();
                 var substart = System.currentTimeMillis();
-                result = minimize(model);
+                result = minimize(model, deadline);
                 var now = System.currentTimeMillis();
-                System.out.println("[" + toSeconds(now - start) + "s] " + toSeconds(now - substart) +
+                debug("[" + toSeconds(now - start) + "s] " + toSeconds(now - substart) +
                         "s discrete re-solve. LP bound: " + (float) relaxed + ", ILP: " +
                         (float) result.getValue());
                 continue;
             }
 
-            System.out.println(iter + " iterations, " + cuts.size() + " cuts, " + cycles.size() + " cycles: " + cycles);
+            debug(iter + " iterations, " + cuts.size() + " cuts, " + cycles.size() + " cycles: " + cycles);
             var cycleDemands = cycles.stream()
                     .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                     .toList();
-            System.out.println("Cost " + result.getValue() + ", cycle demands: " + cycleDemands);
+            debug("Cost " + result.getValue() + ", cycle demands: " + cycleDemands);
 
             return new Result(Result.State.OPTIMAL, result.getValue(), cycles);
         }
 
         return null;
+    }
+
+    private void debug(String s) {
+        if (debug) {
+            BasicLogger.debug(s);
+        }
+    }
+
+    /**
+     * Get the debug property
+     *
+     * @return true if debug logging is enabled
+     */
+    @SuppressWarnings("unused")
+    public boolean isDebug() {
+        return debug;
+    }
+
+    /**
+     * Set the debug property. If enabled, logging works via ojAlgo's {@link BasicLogger} mechanism.
+     * You can supply a thin wrapper implementation to redirect it to the logging library of your choice.
+     *
+     * @param debug true if debug logging is enabled
+     */
+    @SuppressWarnings("unused")
+    public void setDebug(boolean debug) {
+        this.debug = debug;
     }
 }

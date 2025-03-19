@@ -43,9 +43,9 @@ class OjAlgoCVRPSolverTest {
      */
     @Test
     void eil33() throws IOException {
-        var solver = new OjAlgoCVRPSolver();
+        var solver = newSolver();
         var timeout = 300_000L;
-        solver.setBestFirstMillis(timeout); // overriding here because I think JaCoCo slows tests down
+        solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
 
         assertEquals(new Result(Result.State.OPTIMAL, 837.67155201, List.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
@@ -53,6 +53,12 @@ class OjAlgoCVRPSolverTest {
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
                         List.of(0, 30, 14, 31))),
                 doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+    }
+
+    private static OjAlgoCVRPSolver newSolver() {
+        var solver = new OjAlgoCVRPSolver();
+        solver.setDebug(true);
+        return solver;
     }
 
     // takes 3-4 seconds
@@ -125,7 +131,7 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     void timeoutInNode() throws IOException {
-        var solver = new OjAlgoCVRPSolver();
+        var solver = newSolver();
         solver.setBestFirstMillis(0L); // deliberately slow this down
         Result result = (Result) doTestEil33(Integer.MAX_VALUE, false, 25_000L, 8000, solver);
         assertTrue(result.state().isFeasible());
@@ -172,7 +178,7 @@ class OjAlgoCVRPSolverTest {
     void infeasible() {
         var FORTYFIVE = BigDecimal.valueOf(45);
 
-        var result = new OjAlgoCVRPSolver().solve(1, 2, BigDecimal.valueOf(70),
+        var result = newSolver().solve(1, 2, BigDecimal.valueOf(70),
                 new BigDecimal[]{ZERO, FORTYFIVE, FORTYFIVE, BigDecimal.valueOf(50)},
                 new BigDecimal[][]{
                         {ZERO, ZERO, ZERO, ZERO},
@@ -188,7 +194,7 @@ class OjAlgoCVRPSolverTest {
     void infeasible_timeout() {
         var FORTYFIVE = BigDecimal.valueOf(45);
 
-        var result = new OjAlgoCVRPSolver().solve(1, 2, BigDecimal.valueOf(70),
+        var result = newSolver().solve(1, 2, BigDecimal.valueOf(70),
                 new BigDecimal[]{ZERO, FORTYFIVE, FORTYFIVE, BigDecimal.valueOf(50)},
                 new BigDecimal[][]{
                         {ZERO, ZERO, ZERO, ZERO},
@@ -213,7 +219,7 @@ class OjAlgoCVRPSolverTest {
     }
 
     private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity) throws IOException {
-        return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, new OjAlgoCVRPSolver());
+        return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, newSolver());
     }
 
     private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity, OjAlgoCVRPSolver solver) throws IOException {
