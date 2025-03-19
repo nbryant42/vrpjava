@@ -129,7 +129,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                                     ExpressionsBasedModel model,
                                                     GlobalBounds globalBounds,
                                                     long deadline) {
-        //var iter = 1;
         var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
@@ -152,7 +151,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
 
         // done or timed out.
-        //debug(iter + " iterations, " + cuts.size() + " cuts");
         return result;
     }
 
@@ -167,7 +165,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                                         ExpressionsBasedModel model,
                                                         GlobalBounds globalBounds,
                                                         long deadline) {
-        //var iter = 1;
         var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
@@ -188,8 +185,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                     updateBounds(vehicleCapacity, demands, model, globalBounds, deadline) :
                     result;
         }
-
-        //debug(iter + " iterations, " + cuts.size() + " cuts");
 
         return result; // infeasible or timed out.
     }
@@ -632,18 +627,23 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
     }
 
-    // TODO this will sometimes crash due to conflicts
     private static void findRemainingFractionalCycles(int size,
                                                       Optimisation.Result result,
                                                       List<Set<Integer>> cycles,
                                                       Set<Integer> remaining) {
-        int src;
+        for (int src; (src = pop(remaining)) > 0; ) {
+            var cycle = new HashSet<Integer>();
+            var toAdd = new HashSet<Integer>();
 
-        while ((src = pop(remaining)) >= 0) {
-            var cycleNodes = new HashSet<Integer>();
-            findCycleNodes(size, result, remaining, cycleNodes, src);
+            do {
+                arcsFrom(src, size, result).stream().map(Target::node).filter(n -> !cycle.contains(n))
+                        .forEach(toAdd::add);
+                cycle.add(src);
+                remaining.remove(src);
+                src = pop(toAdd);
+            } while (src > 0);
 
-            cycles.add(cycleNodes);
+            cycles.add(cycle);
         }
     }
 
