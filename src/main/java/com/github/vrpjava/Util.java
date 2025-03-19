@@ -73,8 +73,8 @@ public class Util {
         //options.feasibility = NumberContext.of(14, 9);
         options.solution = NumberContext.of(14, 9); // TODO revisit this?
 
-        // theoretically this should be better if the solver handles it correctly, but I'm not sure if I can
-        // measure any improvement:
+        // This is clearly much faster than the primal solver, but I wonder if ojAlgo is taking full advantage of
+        // the dual variables after new constraints are added:
         options.linear().dual();
         return new ExpressionsBasedModel(options);
     }
