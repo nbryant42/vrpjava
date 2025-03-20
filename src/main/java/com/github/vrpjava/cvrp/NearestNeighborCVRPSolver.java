@@ -3,13 +3,14 @@ package com.github.vrpjava.cvrp;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static java.math.BigDecimal.TWO;
+import static java.lang.Math.max;
 import static java.math.BigDecimal.ZERO;
-import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toCollection;
 
 /**
  * <p>
@@ -30,6 +31,16 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
     public NearestNeighborCVRPSolver() {
     }
 
+    private static class Cycle {
+        private BigDecimal load = ZERO;
+        private final List<Integer> nodes = new ArrayList<>();
+        private boolean full;
+
+        private Cycle() {
+            nodes.add(0);
+        }
+    }
+
     @Override
     protected Result doSolve(int minVehicles,
                              int maxVehicles,
@@ -37,51 +48,55 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
                              BigDecimal[] demands,
                              BigDecimal[][] costMatrix,
                              long timeout) {
-        var cycles = new ArrayList<List<Integer>>();
-        var remaining = IntStream.range(1, demands.length).boxed().collect(toSet());
+        var remaining = IntStream.range(1, demands.length).boxed().collect(toCollection(HashSet::new));
         var objective = ZERO;
 
-        outerLoop:
-        do {
-            var cycle = new ArrayList<Integer>();
-            var node = 0;
-            var load = ZERO;
+        minVehicles = max(minVehicles, minVehicles(vehicleCapacity, demands));
 
-            cycle.add(0);
-            while (true) {
-                if (remaining.size() < minVehicles - cycles.size()) {
-                    objective = objective.add(lookup(0, cycle.getLast(), costMatrix));
-                    cycles.add(cycle);
-                    break outerLoop;
-                }
+        var cycles = IntStream.range(0, minVehicles).mapToObj(i -> new Cycle()).collect(toCollection(ArrayList::new));
 
-                var next = findNearestNeighbor(vehicleCapacity, demands, costMatrix, node, load, remaining);
-
-                if (next <= 0) {
-                    break;
-                }
-
-                cycle.add(next);
-                objective = objective.add(lookup(node, next, costMatrix));
-                load = load.add(demands[next]);
+        for (List<Cycle> pending; !remaining.isEmpty() &&
+                !(pending = cycles.stream().filter(c -> !c.full).toList()).isEmpty(); ) {
+            for (var cycle : pending) {
+                objective = objective.add(extend(cycle, vehicleCapacity, demands, costMatrix, remaining));
             }
+        }
 
-            objective = objective.add(lookup(0, cycle.getLast(), costMatrix));
+        while (!remaining.isEmpty()) {
+            var cycle = new Cycle();
+            do {
+                objective = objective.add(extend(cycle, vehicleCapacity, demands, costMatrix, remaining));
+            } while (!cycle.full);
             cycles.add(cycle);
-        } while (!remaining.isEmpty());
+        }
 
-        // these were left over to satisfy `minVehicles`
-        for (var r : remaining) {
-            var c = new ArrayList<Integer>();
-            c.add(0);
-            c.add(r);
-            cycles.add(c);
-            objective = objective.add(lookup(0, r, costMatrix).multiply(TWO));
+        for (var cycle : cycles) {
+            objective = objective.add(costMatrix[cycle.nodes.getLast()][0]);
         }
 
         return cycles.size() > maxVehicles ?
                 new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of()) :
-                new Result(Result.State.HEURISTIC, objective.doubleValue(), cycles);
+                new Result(Result.State.HEURISTIC, objective.doubleValue(), cycles.stream().map(c -> c.nodes).toList());
+    }
+
+    private static BigDecimal extend(Cycle cycle,
+                                     BigDecimal vehicleCapacity,
+                                     BigDecimal[] demands,
+                                     BigDecimal[][] costMatrix,
+                                     HashSet<Integer> remaining) {
+        var nodes = cycle.nodes;
+        var load = cycle.load;
+        var node = nodes.getLast();
+        var next = findNearestNeighbor(vehicleCapacity, demands, costMatrix, node, load, remaining);
+        if (next > 0) {
+            remaining.remove(next);
+            nodes.add(next);
+            cycle.load = load.add(demands[next]);
+            return lookup(node, next, costMatrix);
+        } else {
+            cycle.full = true;
+            return ZERO;
+        }
     }
 
     // Find the nearest neighbor that satisfies all the constraints.

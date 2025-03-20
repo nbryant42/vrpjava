@@ -81,18 +81,18 @@ class OjAlgoCVRPSolverTest {
     @Disabled
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
-        // best I've seen from a <= 5 minute run is 1539.9554.
-        // I also saw some better results, but that took a lot of time after hardcoding the upper bound.
         // Best known (to me) solution is as follows, obtained on a Ryzen 9 3900X:
         //
-        // [22.176s]: Bounds init complete. Bounds from heuristic: 1430.6775/1539.9556 (92.90%)
-        // Currently 200 cuts.
-        // [362.291s]: New incumbent. Bounds now 1430.6775/1539.1586 (92.95%)
-        // [530.284s]: New incumbent. Bounds now 1430.6775/1534.6448 (93.23%)
-        // 2851 nodes, 8 cycles: [[0, 1, 15, 17, 28, 16, 27], [0, 2, 10, 9, 8, 6, 5], [0, 3, 31, 14], [0, 4, 32, 11, 12], [0, 7, 22, 18], [0, 13, 19, 21, 20, 23, 24, 25], [0, 26], [0, 29, 30]]
-        // Cycle demands: [4000, 2770, 3700, 3950, 3950, 4000, 4000, 3000]
-        // Currently 1107 cuts.
-        // Total elapsed: 900130 ms
+        // Currently 201 cuts.
+        // [23.783s]: Initial solution. Bounds now 1430.6775/1996.0273 (71.68%)
+        // [95.870s]: New solution. Bounds now 1430.6775/1490.0372 (96.02%)
+        // [138.927s]: New solution. Bounds now 1430.6775/1489.5574 (96.05%)
+        // [156.401s]: New solution. Bounds now 1430.6775/1488.7949 (96.10%)
+        // [211.726s]: New solution. Bounds now 1430.6775/1486.3844 (96.25%)
+        // 321 nodes, 8 cycles: [[0, 1, 14, 31], [0, 2, 12, 11, 4], [0, 3, 5, 6, 9, 10, 23, 22], [0, 7, 8, 32], [0, 13, 25, 24, 20, 21, 19, 18], [0, 15, 17, 27, 16, 28, 29], [0, 26], [0, 30]]
+        // Cycle demands: [4000, 3250, 3870, 4000, 3950, 3800, 4000, 2500]
+        // Currently 694 cuts.
+        // Total elapsed: 300008 ms
         double v = 1674.9719;
         if (r.objective() > v) {
             fail("Objective > " + v);
@@ -111,21 +111,21 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     void timeoutImmediate() throws IOException {
-        assertEquals(new Result(Result.State.HEURISTIC, 2875.8908523, List.of(
-                        List.of(0, 3, 4, 2, 12, 30, 31, 5, 11, 6),
-                        List.of(0, 7, 32, 1, 13, 8, 9, 10, 14),
-                        List.of(0, 15, 17, 29, 26, 18, 19, 25),
-                        List.of(0, 28, 27, 21, 22, 20, 24, 16, 23))),
+        assertEquals(new Result(Result.State.HEURISTIC, 1043.17356774, List.of(
+                        List.of(0, 3, 5, 32, 13, 15, 17, 26, 28),
+                        List.of(0, 4, 7, 8, 1, 14, 25),
+                        List.of(0, 2, 11, 9, 18, 21, 20, 23, 16, 30),
+                        List.of(0, 12, 6, 10, 19, 22, 24, 27, 29, 31))),
                 doTestEil33(Integer.MAX_VALUE, 0L));
     }
 
     @Test
     void timeoutInRccSep() throws IOException {
-        assertEquals(new Result(Result.State.HEURISTIC, 2875.8908523, List.of(
-                        List.of(0, 3, 4, 2, 12, 30, 31, 5, 11, 6),
-                        List.of(0, 7, 32, 1, 13, 8, 9, 10, 14),
-                        List.of(0, 15, 17, 29, 26, 18, 19, 25),
-                        List.of(0, 28, 27, 21, 22, 20, 24, 16, 23))),
+        assertEquals(new Result(Result.State.HEURISTIC, 1043.17356774, List.of(
+                        List.of(0, 3, 5, 32, 13, 15, 17, 26, 28),
+                        List.of(0, 4, 7, 8, 1, 14, 25),
+                        List.of(0, 2, 11, 9, 18, 21, 20, 23, 16, 30),
+                        List.of(0, 12, 6, 10, 19, 22, 24, 27, 29, 31))),
                 doTestEil33(Integer.MAX_VALUE, 100L));
     }
 

@@ -227,7 +227,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             }
         }
 
-        logHeuristicBounds(start, globalBounds.getResult(deadline).getValue(), bestKnown);
         logCutCount(globalBounds);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
@@ -236,7 +235,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         // search. Depth-first search finds many valid solutions more quickly, whereas best-first search is more likely
         // to proceed directly to the better solutions, but will explore more internal nodes before it gets there. We
         // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
-        var queue = Collections.asLifoQueue(new ArrayDeque<Node>());
+        var queue = evaluateStrategy(globalBounds.getResult(deadline).getValue(), bestKnown, start,
+                Collections.asLifoQueue(new ArrayDeque<>()), "Initial");
         var nodes = 0;
         var myState = kickstarter.state();
         Optimisation.Result incumbent = null;
@@ -292,20 +292,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
             } else {
                 var globalBoundsResult = globalBounds.getResult(deadline);
                 var lb = globalBoundsResult.getValue();
-                var ratio = lb / ub;
-                var elapsed = System.currentTimeMillis() - start;
-
-                if (!(queue instanceof PriorityQueue<Node>) && ratio > bestFirstRatio && elapsed < bestFirstMillis) {
-                    // Found a feasible solution, and bounds are tight enough that best-first search may help.
-                    // Switch to best-first search.
-                    // Also, if it's taken us more than X amount of time to get here, then we're working a
-                    // hard problem, and it's not a good idea to switch.
-                    queue = new PriorityQueue<>(queue);
-                    debug("Switching to best-first search.");
-                }
-                debug("[" + toSeconds(elapsed) + "s]: New incumbent. Bounds now " +
-                        (float) lb + '/' + (float) ub + " (" +
-                        BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
+                queue = evaluateStrategy(lb, ub, start, queue, "New");
 
                 incumbent = nodeResult;
                 bestKnown = ub;
@@ -322,6 +309,30 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
 
         return buildResult(myState, demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
+    }
+
+    /**
+     * Possibly update the search strategy from depth-first to best-first.
+     *
+     * @return either an updated queue (if changing the strategy) or the existing queue unmodified
+     */
+    private Queue<Node> evaluateStrategy(double lb, double ub, long start, Queue<Node> queue, String descriptor) {
+        var ratio = lb / ub;
+        var elapsed = System.currentTimeMillis() - start;
+        var suffix = (float) lb + "/" + (float) ub + " (" +
+                BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)";
+
+        if (!(queue instanceof PriorityQueue<Node>) && ratio > bestFirstRatio && elapsed < bestFirstMillis) {
+            // Found a feasible solution, and bounds are tight enough that best-first search may help.
+            // Switch to best-first search.
+            // Also, if it's taken us more than X amount of time to get here, then we're working a
+            // hard problem, and it's not a good idea to switch.
+            queue = new PriorityQueue<>(queue);
+            debug("[" + toSeconds(elapsed) + "s]: Switching to best-first search. Bounds now " + suffix);
+        } else {
+            debug("[" + toSeconds(elapsed) + "s]: " + descriptor + " solution. Bounds now " + suffix);
+        }
+        return queue;
     }
 
     private void debug(String s) {
@@ -347,13 +358,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         logCutCount(globalBounds);
 
         return new Result(myState, bestKnown, cycles);
-    }
-
-    private void logHeuristicBounds(long start, double lb, double ub) {
-        debug("[" + toSeconds(System.currentTimeMillis() - start) +
-                "s]: Bounds init complete. Bounds from heuristic: " +
-                (float) lb + '/' + (float) ub + " (" +
-                BigDecimal.valueOf((lb / ub) * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)");
     }
 
     static BigDecimal toSeconds(long val) {
