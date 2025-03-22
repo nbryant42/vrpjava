@@ -15,7 +15,6 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.LongStream;
 
 import static com.github.vrpjava.Util.setTimeout;
 import static com.github.vrpjava.cvrp.CutCandidates.round;
@@ -95,23 +94,23 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                            Set<Set<Integer>> cuts,
                            ExpressionsBasedModel model,
                            Optimisation.Result result,
-                           GlobalBounds globalBounds,
+                           Job job,
                            int size) {
-        return candidates.stream().map(cut -> addCut(cuts, model, result, globalBounds, cut, size))
+        return candidates.stream().map(cut -> addCut(cuts, model, result, job, cut, size))
                 .reduce(false, (a, b) -> a || b);
     }
 
     private static boolean addCut(Set<Set<Integer>> cuts,
                                   ExpressionsBasedModel model,
                                   Optimisation.Result result,
-                                  GlobalBounds globalBounds,
+                                  Job job,
                                   Cut cut,
                                   int size) {
         var subset = cut.subset();
         subset.remove(0);
 
         if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
-            addCut(size, model, globalBounds, subset, cut.minVehicles());
+            addCut(size, model, job, subset, cut.minVehicles());
             return true;
         }
         return false;
@@ -121,7 +120,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     // if `globalBounds` is not null.
     private static void addCut(int size,
                                ExpressionsBasedModel model,
-                               GlobalBounds globalBounds,
+                               Job job,
                                Set<Integer> subset,
                                int minVehicles) {
         var name = formatCut(subset);
@@ -130,14 +129,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         //debug("Adding " + name + " >= " + min);
 
         addCut(size, model, subset, name, min);
-        if (globalBounds != null) {
-            addCut(size, globalBounds.getModel(), subset, name, min);
-            // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
-            globalBounds.clearResult();
+        if (job != null) {
+            job.addCut(subset, name, min);
         }
     }
 
-    private static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long min) {
+    static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long min) {
         var cut = model.newExpression(name).lower(min);
 
         for (var target : subset) {
