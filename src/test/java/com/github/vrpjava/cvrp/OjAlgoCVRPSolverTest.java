@@ -1,6 +1,5 @@
 package com.github.vrpjava.cvrp;
 
-import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.GlobalBounds;
 import io.github.lmores.tsplib.TsplibArchive;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
@@ -15,6 +14,7 @@ import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.setUpHardware;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
+import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
 import static java.lang.Math.min;
 import static java.lang.Math.pow;
@@ -251,7 +251,7 @@ class OjAlgoCVRPSolverTest {
         var minVehicles = 1;
         var start = System.currentTimeMillis();
         var result = boundsOnly ?
-                solver.initBounds(minVehicles, dim - 1, capacity, demands, costs, start + timeoutMillis) :
+                initBounds(minVehicles, dim - 1, capacity, demands, costs, start + timeoutMillis) :
                 solver.solve(minVehicles, dim - 1, capacity, demands, costs, timeoutMillis);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
