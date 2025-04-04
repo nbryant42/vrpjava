@@ -16,9 +16,7 @@ import static java.util.stream.Collectors.toCollection;
  * <p>
  * A fast, but very simple heuristic solver for the Capacitated Vehicle Routing Problem.
  * </p><p>
- * The solutions returned are not very good, but they are better than nothing.
- * </p><p>
- * Best used to provide the starting point for a better solver.
+ * Can be used to provide the starting point for a better solver.
  * Used by {@link OjAlgoCVRPSolver} by default.
  * </p>
  *

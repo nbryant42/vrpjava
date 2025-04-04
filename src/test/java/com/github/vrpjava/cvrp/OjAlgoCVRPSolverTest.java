@@ -81,19 +81,16 @@ class OjAlgoCVRPSolverTest {
     @Disabled
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
-        // Best known (to me) solution is as follows, obtained on a Ryzen 9 3900X:
+        // Logs for the best known (to me) solution:
         //
         // Currently 201 cuts.
-        // [23.783s]: Initial solution. Bounds now 1430.6775/1996.0273 (71.68%)
-        // [95.870s]: New solution. Bounds now 1430.6775/1490.0372 (96.02%)
-        // [138.927s]: New solution. Bounds now 1430.6775/1489.5574 (96.05%)
-        // [156.401s]: New solution. Bounds now 1430.6775/1488.7949 (96.10%)
-        // [211.726s]: New solution. Bounds now 1430.6775/1486.3844 (96.25%)
-        // 321 nodes, 8 cycles: [[0, 1, 14, 31], [0, 2, 12, 11, 4], [0, 3, 5, 6, 9, 10, 23, 22], [0, 7, 8, 32], [0, 13, 25, 24, 20, 21, 19, 18], [0, 15, 17, 27, 16, 28, 29], [0, 26], [0, 30]]
-        // Cycle demands: [4000, 3250, 3870, 4000, 3950, 3800, 4000, 2500]
-        // Currently 694 cuts.
-        // Total elapsed: 300008 ms
-        double v = 1674.9719;
+        // [12.016s]: Initial solution. Bounds now 1430.6775/1996.0273 (71.68%)
+        // [29.716s]: Switching to best-first search. Bounds now 1430.6775/1464.0461 (97.72%)
+        // 2174 nodes, 8 cycles: [[0, 1, 14, 31], [0, 2, 12, 11, 4], [0, 3, 32, 10, 9, 8, 6, 5], [0, 7, 22, 18], [0, 13, 19, 21, 20, 23, 24, 25], [0, 15, 17, 27, 16, 28, 29], [0, 26], [0, 30]]
+        // Cycle demands: [4000, 3250, 3870, 3950, 4000, 3800, 4000, 2500]
+        // Currently 440 cuts.
+        // Total elapsed: 300015 ms
+        double v = 1680.3134;
         if (r.objective() > v) {
             fail("Objective > " + v);
         }
