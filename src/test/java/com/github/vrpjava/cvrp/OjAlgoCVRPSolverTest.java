@@ -88,12 +88,13 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         //
         // Logs for the best known (to me) solution:
         //
-        // Currently 201 cuts.
-        // [12.016s]: Initial solution. Bounds now 1430.6775/1996.0273 (71.68%)
-        // [29.716s]: Switching to best-first search. Bounds now 1430.6775/1464.0461 (97.72%)
-        // 2174 nodes, 8 cycles: [[0, 1, 14, 31], [0, 2, 12, 11, 4], [0, 3, 32, 10, 9, 8, 6, 5], [0, 7, 22, 18], [0, 13, 19, 21, 20, 23, 24, 25], [0, 15, 17, 27, 16, 28, 29], [0, 26], [0, 30]]
-        // Cycle demands: [4000, 3250, 3870, 3950, 4000, 3800, 4000, 2500]
-        // Currently 440 cuts.
+        // Currently 228 cuts.
+        // [19.558s]: Initial solution. Bounds now 1430.6775/1535.6805 (93.16%)
+        // [51.750s]: New solution. Bounds now 1430.6775/1462.7662 (97.81%)
+        // [88.375s]: New solution. Bounds now 1430.6775/1456.1049 (98.25%)
+        // 388 nodes, 8 cycles: [[0, 4, 7], [0, 15, 17, 27, 16, 28, 29], [0, 2, 12, 11, 22, 18], [0, 13, 19, 21, 20, 23, 24, 25], [0, 3, 5, 6, 8, 9, 10, 32], [0, 26], [0, 1, 14, 31], [0, 30]]
+        // Cycle demands: [3200, 3800, 4000, 4000, 3870, 4000, 4000, 2500]
+        // Currently 649 cuts.
         // Total elapsed: 300015 ms
         double v = 1535.6805;
         if (r.objective() > v) {
