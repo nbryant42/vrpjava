@@ -33,7 +33,6 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
     private boolean debug;
 
     protected Result doSolve(int minVehicles,
-                             int maxVehicles,
                              BigDecimal vehicleCapacity,
                              BigDecimal[] demands,
                              BigDecimal[][] costMatrix,
@@ -47,7 +46,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
         var vars = buildVars(costMatrix, model);
         var cuts = new HashSet<Set<Integer>>();
 
-        buildConstraints(model, minVehicles, maxVehicles, vars);
+        buildConstraints(model, minVehicles, vars);
 
         // solve
 

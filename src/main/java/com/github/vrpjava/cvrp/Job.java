@@ -38,24 +38,24 @@ class Job {
     private Result.State state;
     private Optimisation.Result incumbent;
 
-    public Job(OjAlgoCVRPSolver solver, int minVehicles, int maxVehicles, BigDecimal vehicleCapacity,
+    public Job(OjAlgoCVRPSolver solver, int minVehicles, BigDecimal vehicleCapacity,
                BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
         this.start = System.currentTimeMillis();
         this.solver = solver;
         this.vehicleCapacity = vehicleCapacity;
         this.demands = demands;
         this.deadline = start + timeout;
-        this.kickstarter = solver.getHeuristic().doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix,
+        this.kickstarter = solver.getHeuristic().doSolve(minVehicles, vehicleCapacity, demands, costMatrix,
                 timeout);
-        this.globalBounds = initBounds(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, deadline);
+        this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline);
     }
 
-    static GlobalBounds initBounds(int minVehicles, int maxVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
+    static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
                                    BigDecimal[][] costMatrix, long deadline) {
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
 
-        buildConstraints(model, minVehicles, maxVehicles, vars);
+        buildConstraints(model, minVehicles, vars);
         model.relax();
 
         return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
@@ -63,6 +63,8 @@ class Job {
 
     Result run() {
         if (kickstarter.state() != Result.State.HEURISTIC) {
+            // This theoretically can't happen now that I've removed the ill-considered `maxVehicles` parameter, but
+            // let's check the status just to be thorough:
             bestKnown = POSITIVE_INFINITY;
 
             if (!globalBounds.getResult(deadline).getState().isOptimal()) {

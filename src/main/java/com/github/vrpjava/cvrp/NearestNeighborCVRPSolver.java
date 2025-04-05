@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.lookup;
-import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.ERROR;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.HEURISTIC;
 import static java.lang.Math.max;
 import static java.math.BigDecimal.ZERO;
@@ -49,7 +48,6 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
 
     @Override
     protected Result doSolve(int minVehicles,
-                             int maxVehicles,
                              BigDecimal vehicleCapacity,
                              BigDecimal[] demands,
                              BigDecimal[][] costMatrix,
@@ -80,9 +78,7 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
             objective = objective.add(costMatrix[cycle.nodes.getLast()][0]);
         }
 
-        return cycles.size() > maxVehicles ?
-                new Result(ERROR, Double.POSITIVE_INFINITY, Set.of()) :
-                new Result(HEURISTIC, objective.doubleValue(), cycles.stream().map(Cycle::nodes).collect(toSet()));
+        return new Result(HEURISTIC, objective.doubleValue(), cycles.stream().map(Cycle::nodes).collect(toSet()));
     }
 
     private static BigDecimal extend(Cycle cycle,

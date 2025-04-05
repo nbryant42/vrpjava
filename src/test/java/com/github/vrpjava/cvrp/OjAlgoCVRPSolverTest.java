@@ -20,7 +20,6 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
 import static java.lang.Math.min;
 import static java.lang.Math.pow;
 import static java.lang.Math.sqrt;
-import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -183,38 +182,6 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 doTestEil33(25));
     }
 
-    @Test
-    void infeasible() {
-        var FORTYFIVE = BigDecimal.valueOf(45);
-
-        var result = newSolver().solve(1, 2, BigDecimal.valueOf(70),
-                new BigDecimal[]{ZERO, FORTYFIVE, FORTYFIVE, BigDecimal.valueOf(50)},
-                new BigDecimal[][]{
-                        {ZERO, ZERO, ZERO, ZERO},
-                        {ONE, ZERO, ZERO, ZERO},
-                        {ONE, ONE, ZERO, ZERO},
-                        {ONE, ONE, ONE, ZERO},
-                });
-
-        assertEquals(new Result(Result.State.INFEASIBLE, Double.POSITIVE_INFINITY, Set.of()), result);
-    }
-
-    @Test
-    void infeasible_timeout() {
-        var FORTYFIVE = BigDecimal.valueOf(45);
-
-        var result = newSolver().solve(1, 2, BigDecimal.valueOf(70),
-                new BigDecimal[]{ZERO, FORTYFIVE, FORTYFIVE, BigDecimal.valueOf(50)},
-                new BigDecimal[][]{
-                        {ZERO, ZERO, ZERO, ZERO},
-                        {ONE, ZERO, ZERO, ZERO},
-                        {ONE, ONE, ZERO, ZERO},
-                        {ONE, ONE, ONE, ZERO},
-                }, 0L);
-
-        assertEquals(new Result(Result.State.UNEXPLORED, Double.POSITIVE_INFINITY, Set.of()), result);
-    }
-
     private Result doTestEil33(int limit) throws IOException {
         return doTestEil33(limit, 1000L * 60L * 60L);
     }
@@ -260,8 +227,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var minVehicles = 1;
         var start = System.currentTimeMillis();
         var result = boundsOnly ?
-                initBounds(minVehicles, dim - 1, capacity, demands, costs, start + timeoutMillis) :
-                solver.solve(minVehicles, dim - 1, capacity, demands, costs, timeoutMillis);
+                initBounds(minVehicles, capacity, demands, costs, start + timeoutMillis) :
+                solver.solve(minVehicles, capacity, demands, costs, timeoutMillis);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 

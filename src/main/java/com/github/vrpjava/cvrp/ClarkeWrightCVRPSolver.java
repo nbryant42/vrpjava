@@ -48,7 +48,7 @@ public class ClarkeWrightCVRPSolver extends CVRPSolver {
     }
 
     @Override
-    protected Result doSolve(int minVehicles, int maxVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
+    protected Result doSolve(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
                              BigDecimal[][] costMatrix, long timeout) {
         var size = demands.length;
         var cycles = new HashSet<Cycle>();
@@ -65,11 +65,6 @@ public class ClarkeWrightCVRPSolver extends CVRPSolver {
         for (var iterator = savings.iterator(); iterator.hasNext() && cycles.size() > minVehicles; ) {
             var s = iterator.next();
             maybeMergeCycles(s.i, s.j, vehicleCapacity, customersToCycles, cycles);
-        }
-
-        // (3a) check for maxVehicles violation. TODO: this really doesn't make sense. remove it entirely.
-        if (cycles.size() > maxVehicles) {
-            return new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, Set.of());
         }
 
         // (4) convert solution to the expected format and return.

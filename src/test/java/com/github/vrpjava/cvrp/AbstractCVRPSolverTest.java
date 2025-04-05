@@ -26,16 +26,16 @@ public abstract class AbstractCVRPSolverTest {
 
         // capacity constraint
         assertEquals(new CVRPSolver.Result(expectedStatus(), 4.0, Set.of(List.of(0, 1), List.of(0, 2))),
-                solver.doSolve(1, 2, ONE, demands, costs, 0L));
+                solver.doSolve(1, ONE, demands, costs, 0L));
 
         // constraints non-binding. There are two equivalent solutions here; allow either.
-        var actual = solver.doSolve(1, 2, TWO, demands, costs, 0L);
+        var actual = solver.doSolve(1, TWO, demands, costs, 0L);
         assertTrue(new CVRPSolver.Result(expectedStatus(), 3.0, Set.of(List.of(0, 1, 2))).equals(actual) ||
                 new CVRPSolver.Result(expectedStatus(), 3.0, Set.of(List.of(0, 2, 1))).equals(actual));
 
         // min vehicles constraint
         assertEquals(new CVRPSolver.Result(expectedStatus(), 4.0, Set.of(List.of(0, 1), List.of(0, 2))),
-                solver.doSolve(2, 2, TWO, demands, costs, 0L));
+                solver.doSolve(2, TWO, demands, costs, 0L));
     }
 
     protected CVRPSolver.Result.State expectedStatus() {

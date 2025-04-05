@@ -128,21 +128,18 @@ public abstract class CVRPSolver {
      *
      * @param minVehicles     Require a solution using at least this many vehicles.
      *                        Typically set to 1.
-     * @param maxVehicles     require a solution using at most this many vehicles.
-     *                        Typically set to <code>demands.length - 1</code>
      * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
      * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
      * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
      * @return the solution, which may be exact or approximate
-     * @see #solve(int, int, BigDecimal, BigDecimal[], BigDecimal[][], long)
+     * @see #solve(int, BigDecimal, BigDecimal[], BigDecimal[][], long)
      */
     @SuppressWarnings("unused")
     public final Result solve(int minVehicles,
-                              int maxVehicles,
                               BigDecimal vehicleCapacity,
                               BigDecimal[] demands,
                               BigDecimal[][] costMatrix) {
-        return solve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, 1000L * 60L * 60L);
+        return solve(minVehicles, vehicleCapacity, demands, costMatrix, 1000L * 60L * 60L);
     }
 
     /**
@@ -150,8 +147,6 @@ public abstract class CVRPSolver {
      *
      * @param minVehicles     Require a solution using at least this many vehicles.
      *                        Typically set to 1.
-     * @param maxVehicles     require a solution using at most this many vehicles.
-     *                        Typically set to <code>demands.length - 1</code>
      * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
      * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
      * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
@@ -159,7 +154,6 @@ public abstract class CVRPSolver {
      * @return the solution, which may be exact or approximate
      */
     public final Result solve(int minVehicles,
-                              int maxVehicles,
                               BigDecimal vehicleCapacity,
                               BigDecimal[] demands,
                               BigDecimal[][] costMatrix,
@@ -169,16 +163,10 @@ public abstract class CVRPSolver {
         if (minVehicles <= 0) {
             throw new IllegalArgumentException("maxVehicles must be a positive integer.");
         }
-        if (maxVehicles <= 0) {
-            throw new IllegalArgumentException("maxVehicles must be a positive integer.");
-        }
         stream(demands).filter(d -> d.compareTo(vehicleCapacity) > 0).forEach(d -> {
             throw new IllegalArgumentException("all demands must be <= vehicleCapacity.");
         });
         minVehicles = max(minVehicles, minVehicles(vehicleCapacity, demands));
-        if (minVehicles > maxVehicles) {
-            throw new IllegalArgumentException("maxVehicles must be at least " + minVehicles + ".");
-        }
         if (vehicleCapacity.signum() <= 0) {
             throw new IllegalArgumentException("vehicleCapacity must be positive.");
         }
@@ -193,7 +181,7 @@ public abstract class CVRPSolver {
             throw new IllegalArgumentException("demands must be positive.");
         });
 
-        return doSolve(minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeoutMillis);
+        return doSolve(minVehicles, vehicleCapacity, demands, costMatrix, timeoutMillis);
     }
 
     /**
@@ -230,12 +218,10 @@ public abstract class CVRPSolver {
 
     /**
      * Must be implemented by subclasses. Called by
-     * {@link #solve(int, int, BigDecimal, BigDecimal[], BigDecimal[][], long)} after performing parameter validations.
+     * {@link #solve(int, BigDecimal, BigDecimal[], BigDecimal[][], long)} after performing parameter validations.
      *
      * @param minVehicles     require a solution using at least this many vehicles.
      *                        Typically set to 1.
-     * @param maxVehicles     require a solution using at most this many vehicles.
-     *                        Typically set to <code>demands.length - 1</code>
      * @param vehicleCapacity The vehicle capacity limit, in units of <code>demands</code>
      * @param demands         Array of customer demands. Index zero is the depot, so should be set to zero.
      * @param costMatrix      A lower-triangular matrix of distances between locations. Column zero is the depot.
@@ -244,7 +230,6 @@ public abstract class CVRPSolver {
      * @return the solution, which may be exact or approximate
      */
     protected abstract Result doSolve(int minVehicles,
-                                      int maxVehicles,
                                       BigDecimal vehicleCapacity,
                                       BigDecimal[] demands,
                                       BigDecimal[][] costMatrix,

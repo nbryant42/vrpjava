@@ -68,7 +68,7 @@ class IterativeRowGenCVRPSolverTest {
         var capacity = BigDecimal.valueOf(val);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
-        var result = solver.doSolve(minVehicles, dim - 1, capacity, demands, costs, timeout);
+        var result = solver.doSolve(minVehicles, capacity, demands, costs, timeout);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 

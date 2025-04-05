@@ -72,12 +72,11 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
     @Override
     protected Result doSolve(int minVehicles,
-                             int maxVehicles,
                              BigDecimal vehicleCapacity,
                              BigDecimal[] demands,
                              BigDecimal[][] costMatrix,
                              long timeout) {
-        return new Job(this, minVehicles, maxVehicles, vehicleCapacity, demands, costMatrix, timeout).run();
+        return new Job(this, minVehicles, vehicleCapacity, demands, costMatrix, timeout).run();
     }
 
     void debug(String s) {
@@ -414,11 +413,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
     static void buildConstraints(ExpressionsBasedModel model,
                                  int minVehicles,
-                                 int maxVehicles,
                                  Variable[][] vars) {
         var size = vars.length;
 
-        var vcConstr = model.newExpression("vehicleCount").lower(2L * minVehicles).upper(2L * maxVehicles);
+        var vcConstr = model.newExpression("vehicleCount").lower(2L * minVehicles);
         for (var i = 1; i < size; i++) {
             vcConstr.set(vars[i][0], ONE);
         }
