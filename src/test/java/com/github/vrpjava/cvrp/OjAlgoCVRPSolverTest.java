@@ -10,9 +10,10 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.github.vrpjava.Util.setUpHardware;
+import static com.github.vrpjava.Util.setUpHardware_14700;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
 import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
@@ -26,10 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.ojalgo.optimisation.Optimisation.State.UNEXPLORED;
 
-class OjAlgoCVRPSolverTest {
+class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @BeforeAll
     static void setUp() {
-        setUpHardware();
+        setUpHardware_14700();
     }
 
     /**
@@ -43,11 +44,13 @@ class OjAlgoCVRPSolverTest {
      */
     @Test
     void eil33() throws IOException {
+        // old heuristic 835.2278/1043.1736 (80.07%)
+        // new heuristic 835.2278/843.0978 (99.07%)
         var solver = newSolver();
         var timeout = 300_000L;
         solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
 
-        assertEquals(new Result(Result.State.OPTIMAL, 837.67155201, List.of(
+        assertEquals(new Result(Result.State.OPTIMAL, 837.67155201, Set.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
@@ -55,7 +58,7 @@ class OjAlgoCVRPSolverTest {
                 doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
     }
 
-    private static OjAlgoCVRPSolver newSolver() {
+    protected OjAlgoCVRPSolver newSolver() {
         var solver = new OjAlgoCVRPSolver();
         solver.setDebug(true);
         return solver;
@@ -81,6 +84,9 @@ class OjAlgoCVRPSolverTest {
     @Disabled
     void eil33_moreVehicles() throws IOException {
         var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 300_000L, 4000);
+        // old heuristic 1430.6775/1996.0273 (71.68%)
+        // new heuristic 1430.6775/1535.6805 (93.16%)
+        //
         // Logs for the best known (to me) solution:
         //
         // Currently 201 cuts.
@@ -90,7 +96,7 @@ class OjAlgoCVRPSolverTest {
         // Cycle demands: [4000, 3250, 3870, 3950, 4000, 3800, 4000, 2500]
         // Currently 440 cuts.
         // Total elapsed: 300015 ms
-        double v = 1680.3134;
+        double v = 1535.6805;
         if (r.objective() > v) {
             fail("Objective > " + v);
         }
@@ -108,21 +114,21 @@ class OjAlgoCVRPSolverTest {
 
     @Test
     void timeoutImmediate() throws IOException {
-        assertEquals(new Result(Result.State.HEURISTIC, 1043.17356774, List.of(
-                        List.of(0, 3, 5, 32, 13, 15, 17, 26, 28),
-                        List.of(0, 4, 7, 8, 1, 14, 25),
-                        List.of(0, 2, 11, 9, 18, 21, 20, 23, 16, 30),
-                        List.of(0, 12, 6, 10, 19, 22, 24, 27, 29, 31))),
+        assertEquals(new Result(Result.State.HEURISTIC, 843.09779333, Set.of(
+                        List.of(0, 3, 1, 14, 31, 30),
+                        List.of(0, 13, 15, 17, 25, 24, 23, 20, 22, 21, 19, 18, 10, 6, 5),
+                        List.of(0, 29, 28, 16, 27, 26),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4))),
                 doTestEil33(Integer.MAX_VALUE, 0L));
     }
 
     @Test
     void timeoutInRccSep() throws IOException {
-        assertEquals(new Result(Result.State.HEURISTIC, 1043.17356774, List.of(
-                        List.of(0, 3, 5, 32, 13, 15, 17, 26, 28),
-                        List.of(0, 4, 7, 8, 1, 14, 25),
-                        List.of(0, 2, 11, 9, 18, 21, 20, 23, 16, 30),
-                        List.of(0, 12, 6, 10, 19, 22, 24, 27, 29, 31))),
+        assertEquals(new Result(Result.State.HEURISTIC, 843.09779333, Set.of(
+                        List.of(0, 3, 1, 14, 31, 30),
+                        List.of(0, 13, 15, 17, 25, 24, 23, 20, 22, 21, 19, 18, 10, 6, 5),
+                        List.of(0, 29, 28, 16, 27, 26),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4))),
                 doTestEil33(Integer.MAX_VALUE, 100L));
     }
 
@@ -137,7 +143,9 @@ class OjAlgoCVRPSolverTest {
     // 240-254ms w/ naive code; now ~550-800 ms
     @Test
     void eil33_reduced() throws IOException {
-        assertEquals(new Result(Result.State.OPTIMAL, 428.7145713, List.of(
+        // old heuristic 422.81018/477.28214 (88.59%)
+        // new heuristic 422.81018/432.9653 (97.65%)
+        assertEquals(new Result(Result.State.OPTIMAL, 428.7145713, Set.of(
                         List.of(0, 2, 12, 11, 10, 9, 8, 7, 6, 5, 4),
                         List.of(0, 3, 13, 1, 14, 15, 16))),
                 doTestEil33(17));
@@ -155,7 +163,9 @@ class OjAlgoCVRPSolverTest {
     // trivial -- solves at the root node -- so, also 1.5s with B&B
     @Test
     void eil33_reduced2() throws IOException {
-        assertEquals(new Result(Result.State.OPTIMAL, 499.25424343, List.of(
+        // old heuristic 499.25424/721.02826 (69.24%)
+        // new heuristic 499.25424/595.4756 (83.84%)
+        assertEquals(new Result(Result.State.OPTIMAL, 499.25424343, Set.of(
                         List.of(0, 1, 14, 15, 17, 16, 23, 22, 20, 21, 19, 18, 13, 12),
                         List.of(0, 3, 2, 11, 10, 9, 8, 7, 6, 5, 4))),
                 doTestEil33(24));
@@ -164,7 +174,9 @@ class OjAlgoCVRPSolverTest {
     // more than 30s to run w/ naive code; 1.3s now. Trivially solvable at root node in B&B.
     @Test
     void eil33_reduced3() throws IOException {
-        assertEquals(new Result(Result.State.OPTIMAL, 588.46611851, List.of(
+        // old heuristic 588.4661/832.13934 (70.72%)
+        // new heuristic 588.4661/593.60974 (99.13%)
+        assertEquals(new Result(Result.State.OPTIMAL, 588.46611851, Set.of(
                         List.of(0, 1, 13, 11, 10, 9, 8, 7, 6, 5, 12, 2, 3),
                         List.of(0, 4),
                         List.of(0, 14, 15, 17, 19, 18, 21, 20, 22, 23, 24, 16))),
@@ -184,7 +196,7 @@ class OjAlgoCVRPSolverTest {
                         {ONE, ONE, ONE, ZERO},
                 });
 
-        assertEquals(new Result(Result.State.INFEASIBLE, Double.POSITIVE_INFINITY, List.of()), result);
+        assertEquals(new Result(Result.State.INFEASIBLE, Double.POSITIVE_INFINITY, Set.of()), result);
     }
 
     @Test
@@ -200,22 +212,22 @@ class OjAlgoCVRPSolverTest {
                         {ONE, ONE, ONE, ZERO},
                 }, 0L);
 
-        assertEquals(new Result(Result.State.UNEXPLORED, Double.POSITIVE_INFINITY, List.of()), result);
+        assertEquals(new Result(Result.State.UNEXPLORED, Double.POSITIVE_INFINITY, Set.of()), result);
     }
 
-    private static Result doTestEil33(int limit) throws IOException {
+    private Result doTestEil33(int limit) throws IOException {
         return doTestEil33(limit, 1000L * 60L * 60L);
     }
 
-    private static Result doTestEil33(int limit, long timeoutMillis) throws IOException {
+    private Result doTestEil33(int limit, long timeoutMillis) throws IOException {
         return (Result) doTestEil33(limit, false, timeoutMillis);
     }
 
-    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis) throws IOException {
+    private Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis) throws IOException {
         return doTestEil33(limit, boundsOnly, timeoutMillis, 8000);
     }
 
-    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity) throws IOException {
+    private Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity) throws IOException {
         return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, newSolver());
     }
 

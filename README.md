@@ -1,9 +1,11 @@
 # vrpjava
 
-This package contains an exact branch-and-bound-and-cut solver for the symmetric
-Capacitated Vehicle Routing Problem (CVRP), written in pure Java.
+This package contains a small collection of algorithms for the symmetric Capacitated Vehicle Routing Problem (CVRP),
+written in pure Java.
 
-It is based on the 2-index Vehicle Flow Formulation and the Pavlikov-Petersen-Sørensen "RCC-Sep" algorithm.
+There is an implementation of the classic Clarke-Wright savings algorithm, but the main thing of interest here is an
+exact branch-and-bound-and-cut solver based on the 2-index Vehicle Flow Formulation and the Pavlikov-Petersen-Sørensen
+"RCC-Sep" algorithm.
 
 These algorithms are discussed in some papers:
 
@@ -57,9 +59,10 @@ for those tunables.
 
 ## Why an exact solver, and not heuristic?
 
-Exact and heuristic solvers are complementary. This solver starts with a configurable heuristic to define the current
-best-known-solution. (Right now this defaults to a simple nearest-neighbor heuristic, but if you have some code that
-performs better than the default, a plugin interface is available.)
+The exact solver may be mainly of academic interest, and as a benchmark for heuristics, but it's not entirely out of the
+question to use it in production; exact and heuristic solvers are complementary. This solver starts with a configurable
+heuristic to define the current best-known-solution. (Right now this defaults to the Clarke-Wright algorithm, but if you
+have some code that performs better than the default, a plugin interface is available.)
 
 It will then search for a better solution, skipping parts of the search tree which provably cannot be better than
 the current best known solution, until it hits whatever timeout you have set, or it has found the provably optimal

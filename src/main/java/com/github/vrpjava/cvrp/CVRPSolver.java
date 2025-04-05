@@ -6,7 +6,9 @@ import org.ojalgo.optimisation.Optimisation;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 
+import static com.github.vrpjava.Util.lookup;
 import static java.lang.Math.max;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Arrays.stream;
@@ -40,7 +42,37 @@ public abstract class CVRPSolver {
      *                  Each cycle is a list of locations visited by the vehicle, represented as integer array indexes
      *                  into the corresponding problem spec, starting with zero (the depot.)
      */
-    public record Result(State state, double objective, List<List<Integer>> cycles) {
+    public record Result(State state, double objective, Set<List<Integer>> cycles) {
+        /**
+         * Convenience constructor to compute the objective based on the costs.
+         *
+         * @param state      reports status, whether {@link State#OPTIMAL}, {@link State#FEASIBLE}, etc.
+         * @param costMatrix the travel distances as a lower-triangular matrix
+         * @param cycles     a list of "cycles" for each vehicle, so called because they represent a Hamiltonian Cycle.
+         *                   Each cycle is a list of locations visited by the vehicle, represented as integer array
+         *                   indexes into the corresponding problem spec, starting with zero (the depot.)
+         */
+        public Result(State state, BigDecimal[][] costMatrix, Set<List<Integer>> cycles) {
+            this(state, totalCosts(costMatrix, cycles), cycles);
+        }
+
+        private static double totalCosts(BigDecimal[][] costMatrix, Set<List<Integer>> cycles) {
+            var obj = ZERO;
+
+            for (var cycle : cycles) {
+                var prev = cycle.getFirst();
+
+                for (int i = 1; i < cycle.size(); i++) {
+                    var cur = cycle.get(i);
+
+                    obj = obj.add(lookup(prev, cur, costMatrix));
+                    prev = cur;
+                }
+                obj = obj.add(costMatrix[prev][0]);
+            }
+            return obj.doubleValue();
+        }
+
         /**
          * These states generally have about the same meaning as in {@link Optimisation.State}, except we have an
          * additional {@link #HEURISTIC} status which would be equivalent to {@link Optimisation.State#FEASIBLE}

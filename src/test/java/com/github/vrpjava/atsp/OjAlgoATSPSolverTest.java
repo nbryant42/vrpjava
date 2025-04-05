@@ -14,7 +14,7 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Arrays.deepToString;
-import static com.github.vrpjava.Util.setUpHardware;
+import static com.github.vrpjava.Util.setUpHardware_14700;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class OjAlgoATSPSolverTest {
@@ -22,7 +22,7 @@ class OjAlgoATSPSolverTest {
 
     @BeforeAll
     static void setUp() {
-        setUpHardware();
+        setUpHardware_14700();
     }
 
     /**

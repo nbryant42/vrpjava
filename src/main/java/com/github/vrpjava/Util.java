@@ -116,10 +116,11 @@ public class Util {
     }
 
     /**
-     * Helper for ojAlgo hardware setup. This is hardcoded for my machine, but may also be suitable for
-     * similar machines from Intel and AMD with caches equal or greater. Used from unit tests, but might
-     * be useful from production code.
+     * Helper for ojAlgo hardware setup. This is optimized for my old machine (a Ryzen 3900X), but may also be suitable
+     * for similar machines from Intel and AMD with caches equal or greater. Used from unit tests, but might be useful
+     * from production code.
      */
+    @SuppressWarnings("unused")
     public static void setUpHardware() {
         System.setProperty("shut.up.ojAlgo", "");
 
@@ -135,5 +136,37 @@ public class Util {
 
         BasicMachine[] levels = {tmpSystemMachine, tmpL3Machine, tmpL2Machine, tmpL1Machine};
         OjAlgoUtils.ENVIRONMENT = new Hardware(VirtualMachine.getArchitecture(), levels).virtualise();
+    }
+
+    /**
+     * Variant of {@link #setUpHardware()} hardcoded for my Core i7-14700KF.
+     * <p>
+     * This is a hybrid processor, so I'm going for the lowest common denominator of cache sizes between the
+     * P-cores and E-cores, and faking it a little bit by telling ojAlgo that we have 20 cores & threads
+     * (actually there are 20 cores and 28 threads, but this can't be divided by two.) I haven't really investigated
+     * whether this is the best approach.
+     */
+    public static void setUpHardware_14700() {
+        System.setProperty("shut.up.ojAlgo", "");
+
+        var tmpL1Machine = new BasicMachine(32L * K, 1);
+        var tmpL2Machine = new BasicMachine(4096L * K, 4);
+        var tmpL3Machine = new BasicMachine(33L * K * K, 20); // CCX
+        var tmpSystemMachine = new BasicMachine(VirtualMachine.getMemory(), 20);
+
+        BasicMachine[] levels = {tmpSystemMachine, tmpL3Machine, tmpL2Machine, tmpL1Machine};
+        OjAlgoUtils.ENVIRONMENT = new Hardware(VirtualMachine.getArchitecture(), levels).virtualise();
+    }
+
+    /**
+     * Look up a distance between two nodes from the cost matrix. The cost matrix is lower-triangular
+     * by convention, so this flips the row and column if necessary.
+     *
+     * @param i          the first node index
+     * @param j          the second node index
+     * @param costMatrix the travel distances as a lower-triangular matrix.
+     */
+    public static BigDecimal lookup(int i, int j, BigDecimal[][] costMatrix) {
+        return i > j ? costMatrix[i][j] : costMatrix[j][i];
     }
 }

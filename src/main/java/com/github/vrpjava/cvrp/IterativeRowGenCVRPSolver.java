@@ -58,7 +58,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
             var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline);
 
             if (rccCuts == null) {
-                return new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of());
+                return new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, Set.of());
             }
             if (addCuts(rccCuts, cuts, model, result, null, vars.length)) {
                 result = minimize(model.snapshot(), deadline);
@@ -74,7 +74,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
 
             // no more cuts to add. done.
 
-            List<List<Integer>> cycles;
+            Set<List<Integer>> cycles;
             try {
                 cycles = findCycles(size, result);
             } catch (IllegalArgumentException e) {

@@ -10,9 +10,11 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.github.vrpjava.Util.setUpHardware;
+import static com.github.vrpjava.Util.setUpHardware_14700;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolverTest.getEdgeWeightNonRounded;
 import static java.lang.Math.min;
 import static java.math.BigDecimal.ZERO;
@@ -22,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class IterativeRowGenCVRPSolverTest {
     @BeforeAll
     static void setUp() {
-        setUpHardware();
+        setUpHardware_14700();
     }
 
     @Test
@@ -70,7 +72,7 @@ class IterativeRowGenCVRPSolverTest {
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 
-        assertEquals(new CVRPSolver.Result(CVRPSolver.Result.State.OPTIMAL, 837.67155201, List.of(
+        assertEquals(new CVRPSolver.Result(OPTIMAL, 837.67155201, Set.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),

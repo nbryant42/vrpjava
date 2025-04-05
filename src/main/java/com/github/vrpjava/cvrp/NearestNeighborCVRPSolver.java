@@ -8,9 +8,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+import static com.github.vrpjava.Util.lookup;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.ERROR;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.HEURISTIC;
 import static java.lang.Math.max;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * <p>
@@ -36,6 +40,10 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
 
         private Cycle() {
             nodes.add(0);
+        }
+
+        private List<Integer> nodes() {
+            return nodes;
         }
     }
 
@@ -73,8 +81,8 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
         }
 
         return cycles.size() > maxVehicles ?
-                new Result(Result.State.ERROR, Double.POSITIVE_INFINITY, List.of()) :
-                new Result(Result.State.HEURISTIC, objective.doubleValue(), cycles.stream().map(c -> c.nodes).toList());
+                new Result(ERROR, Double.POSITIVE_INFINITY, Set.of()) :
+                new Result(HEURISTIC, objective.doubleValue(), cycles.stream().map(Cycle::nodes).collect(toSet()));
     }
 
     private static BigDecimal extend(Cycle cycle,
@@ -110,9 +118,5 @@ public class NearestNeighborCVRPSolver extends CVRPSolver {
                 .orElse(0);
         remaining.remove(rval);
         return rval;
-    }
-
-    private static BigDecimal lookup(int i, int j, BigDecimal[][] costMatrix) {
-        return i > j ? costMatrix[i][j] : costMatrix[j][i];
     }
 }

@@ -53,9 +53,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     public OjAlgoCVRPSolver() {
     }
 
-    private double bestFirstRatio = 0.80;
+    private double bestFirstRatio = 0.95;
     private long bestFirstMillis = 30_000L;
-    private CVRPSolver heuristic = new NearestNeighborCVRPSolver();
+    private CVRPSolver heuristic = new ClarkeWrightCVRPSolver();
 
     record Cut(int minVehicles, Set<Integer> subset) {
         Cut(int size, Optimisation.Result result) {
@@ -232,8 +232,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         return (side * side - side) / 2 - row;
     }
 
-    static List<List<Integer>> findCycles(int size, Optimisation.Result result) {
-        var cycles = new ArrayList<List<Integer>>();
+    static Set<List<Integer>> findCycles(int size, Optimisation.Result result) {
+        var cycles = new HashSet<List<Integer>>();
         var depotArcs = arcsFrom(0, size, result);
         var remaining = IntStream.range(1, size).boxed().collect(toSet());
         var seen = new HashSet<Integer>();
@@ -315,7 +315,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
     private static void findRemainingCycles(int size,
                                             Optimisation.Result result,
-                                            List<List<Integer>> cycles,
+                                            Set<List<Integer>> cycles,
                                             Set<Integer> remaining) {
         int src;
 
