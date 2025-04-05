@@ -19,8 +19,8 @@ or Gurobi via one of ojAlgo's available integrations.
 This code is early and I can't guarantee a stable API yet. But it has proven capable enough to solve,
 to optimality, some medium-size problems; my main test-case has been the EIL33 case discussed at
 https://github.com/IBMDecisionOptimization/Decision-Optimization-with-CPLEX-samples/blob/master/Vehicle-routing.pdf.
-This problem has 32 customers and the optimal solution requires 4 vehicles. On my Ryzen 3900X, the code
-will typically solve it to optimality in about 20-40 seconds.
+This problem has 32 customers and the optimal solution requires 4 vehicles. On my old Ryzen 3900X, the code
+would typically solve it to optimality in about 20-40 seconds; or as little as ~8 seconds on my new i7-14700KF.
 (Runtime is a bit unpredictable due to multiple equivalent LP relaxations that define different starting points.)
 
 See the Javadoc for more details; start with the `OjAlgoCVRPSolver` class.

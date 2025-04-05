@@ -142,7 +142,7 @@ public class Util {
      * Variant of {@link #setUpHardware()} hardcoded for my Core i7-14700KF.
      * <p>
      * This is a hybrid processor, so I'm going for the lowest common denominator of cache sizes between the
-     * P-cores and E-cores, and faking it a little bit by telling ojAlgo that we have 20 cores & threads
+     * P-cores and E-cores, and faking it a little bit by telling ojAlgo that we have 20 cores and threads
      * (actually there are 20 cores and 28 threads, but this can't be divided by two.) I haven't really investigated
      * whether this is the best approach.
      */
@@ -165,6 +165,7 @@ public class Util {
      * @param i          the first node index
      * @param j          the second node index
      * @param costMatrix the travel distances as a lower-triangular matrix.
+     * @return the distance between <code>i</code> and <code>j</code>
      */
     public static BigDecimal lookup(int i, int j, BigDecimal[][] costMatrix) {
         return i > j ? costMatrix[i][j] : costMatrix[j][i];
