@@ -195,11 +195,13 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         return doTestEil33(limit, boundsOnly, timeoutMillis, 8000);
     }
 
-    private Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity) throws IOException {
+    private Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity)
+            throws IOException {
         return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, newSolver());
     }
 
-    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity, OjAlgoCVRPSolver solver) throws IOException {
+    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity,
+                                      OjAlgoCVRPSolver solver) throws IOException {
         var vrp = TsplibArchive.loadVrpInstance("eil33.vrp");
         var dim = min(vrp.dimension(), limit);
         var costs = new BigDecimal[dim][dim];

@@ -210,8 +210,8 @@ class Job {
         return globalBounds.getResult(deadline);
     }
 
-    void addCut(Set<Integer> subset, String name, long min) {
-        OjAlgoCVRPSolver.addCut(demands.length, globalBounds.getModel(), subset, name, min);
+    void addCut(Set<Integer> subset, String name, long minVehicles) {
+        OjAlgoCVRPSolver.addCut(demands.length, globalBounds.getModel(), subset, name, minVehicles);
         // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
         globalBounds.clearResult();
     }

@@ -25,9 +25,10 @@ would typically solve it to optimality in about 20-40 seconds; or as little as ~
 
 See the Javadoc for more details; start with the `OjAlgoCVRPSolver` class.
 
-There are at least a couple potential areas for improvement: constraint format could
-be optimized, depending on the subset size, as discussed in the RCC-Sep paper.
-Multithreading, perhaps. Maybe some more thought to the class and package structure.
+There are at least a couple potential areas for improvement:
+
+* Some of the literature, such as the CVRPSEP manual, suggests there might be better branching strategies.
+* Multithreading. Right now this code doesn't come close to fully utilizing all CPU cores.
 
 But what this needs most, right now, is another pair of eyes to review the code.
 

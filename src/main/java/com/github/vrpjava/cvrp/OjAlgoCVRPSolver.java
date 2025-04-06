@@ -23,6 +23,7 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
+import static org.ojalgo.function.constant.BigMath.HALF;
 
 /**
  * Solver for the Capacitated Vehicle Routing Problem (CVRP).
@@ -45,6 +46,7 @@ import static java.util.stream.Collectors.toSet;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver {
+    private static final BigDecimal MINUS_HALF = HALF.negate();
     private boolean debug;
 
     /**
@@ -123,25 +125,46 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
                                Set<Integer> subset,
                                int minVehicles) {
         var name = formatCut(subset);
-        var min = minVehicles * 2L;
 
         //debug("Adding " + name + " >= " + min);
 
-        addCut(size, model, subset, name, min);
+        addCut(size, model, subset, name, minVehicles);
         if (job != null) {
-            job.addCut(subset, name, min);
+            job.addCut(subset, name, minVehicles);
         }
     }
 
-    static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long min) {
-        var cut = model.newExpression(name).lower(min);
+    static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long minVehicles) {
+        // TODO not sure whether `n` should be `size` or `size-1` here. Number of nodes or number of customers?
+        // This formula comes from the paper. Figure out the derivation.
+        // (If we get this wrong, the results are still correct but our code is just a little slow.)
+        if (subset.size() < size * (size + 1) / (2 * size - 2)) {
+            // Use constraint form (1.3)
 
-        for (var target : subset) {
-            for (var row = 1; row < size; row++) {
-                for (var col = 0; col < row; col++) {
-                    if (target == row && !subset.contains(col) ||
-                            target == col && !subset.contains(row)) {
+            var cut = model.newExpression(name).upper(subset.size() - minVehicles);
+
+            for (var row : subset) {
+                for (var col : subset) {
+                    if (col < row) {
                         cut.set(getVariable_noFlip(row, col, model), ONE);
+                    }
+                }
+            }
+        } else {
+            // Use constraint form (4.1)
+
+            var cut = model.newExpression(name).upper(size - 1 - subset.size() - minVehicles);
+
+            for (var row = 1; row < size; row++) {
+                if (subset.contains(row)) {
+                    cut.set(getVariable_noFlip(row, 0, model), MINUS_HALF);
+                } else {
+                    cut.set(getVariable_noFlip(row, 0, model), HALF);
+
+                    for (var col = 1; col < row; col++) {
+                        if (!subset.contains(col)) {
+                            cut.set(getVariable_noFlip(row, col, model), ONE);
+                        }
                     }
                 }
             }
@@ -227,8 +250,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
      * Undefined for rows < 1. Assumes a lower-triangle matrix for symmetrical problems.
      */
     static int base(int row) {
-        var side = row + 1;
-        return (side * side - side) / 2 - row;
+        return row * (row - 1) / 2;
     }
 
     static Set<List<Integer>> findCycles(int size, Optimisation.Result result) {
