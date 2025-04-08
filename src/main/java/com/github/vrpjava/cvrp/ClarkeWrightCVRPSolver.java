@@ -77,9 +77,14 @@ public class ClarkeWrightCVRPSolver extends CVRPSolver {
 
     private static List<Savings> computeSavings(BigDecimal[][] costMatrix, int size) {
         var savings = new ArrayList<Savings>();
+
         for (int i = 1; i < size; i++) {
             for (int j = 1; j < i; j++) {
-                savings.add(new Savings(i, j, costMatrix[i][0].add(costMatrix[j][0]).subtract(costMatrix[i][j])));
+                var s = costMatrix[i][0].add(costMatrix[j][0]).subtract(costMatrix[i][j]);
+
+                if (s.signum() > 0) {
+                    savings.add(new Savings(i, j, s));
+                }
             }
         }
         savings.sort(null);
