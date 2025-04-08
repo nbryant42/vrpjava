@@ -4,17 +4,18 @@ This package contains a small collection of algorithms for the symmetric Capacit
 written in pure Java.
 
 There is an implementation of the classic Clarke-Wright savings algorithm, but the main thing of interest here is an
-exact branch-and-bound-and-cut solver based on the 2-index Vehicle Flow Formulation and the Pavlikov-Petersen-Sørensen
-"RCC-Sep" algorithm.
-
-These algorithms are discussed in some papers:
+exact branch-and-cut solver based on the 2-index Vehicle Flow Formulation and the Pavlikov-Petersen-Sørensen
+"RCC-Sep" procedure. These are discussed in some papers:
 
 * https://repub.eur.nl/pub/135594/EI2021-01.pdf
 * https://onlinelibrary.wiley.com/doi/10.1002/net.22183
 
-I'm not claiming this is the fastest or best solver in the world; after all, it's pure Java based on
-the open-source MILP solver library, ojAlgo. But it should be easy enough to run this on top of CPLEX
-or Gurobi via one of ojAlgo's available integrations.
+The remainder of this discussion will mostly focus on the exact solver.
+
+This is certainly not the fastest or best solver in the world; there are a number of more advanced techniques it does
+not implement, and after all, it's pure Java based on the open-source MILP solver library, ojAlgo. But it should be easy
+enough to run this on top of a faster MILP solver via one of ojAlgo's
+available [integrations](https://www.ojalgo.org/ojalgo-extensions/).
 
 This code is early and I can't guarantee a stable API yet. But it has proven capable enough to solve,
 to optimality, some medium-size problems; my main test-case has been the EIL33 case discussed at
@@ -25,12 +26,15 @@ would typically solve it to optimality in about 20-40 seconds; or as little as ~
 
 See the Javadoc for more details; start with the `OjAlgoCVRPSolver` class.
 
-There are at least a couple potential areas for improvement:
+There are a few potential areas for improvement:
 
-* Some of the literature, such as the CVRPSEP manual, suggests there might be better branching strategies.
+* There's another branching strategy which makes use of the fact that any customer subset must have an even number of
+  outbound edges. See [Lysgaard et al.](https://www.lancaster.ac.uk/staff/letchfoa/articles/2004-cvrp-exact.pdf)
+  and [Augerat et al.](https://www.osti.gov/etdeweb/servlets/purl/289002.)
+* Those papers also describe a few classes of cutting planes that should improve our bounds.
 * Multithreading. Right now this code doesn't come close to fully utilizing all CPU cores.
 
-But what this needs most, right now, is another pair of eyes to review the code.
+But what this code needs most, right now, is another pair of eyes.
 
 ## Viewing the Javadoc
 
@@ -49,26 +53,26 @@ Look under Project Reports.
 
 ## Search algorithm
 
-The algorithm starts out with a depth-first branch-and-bound search. After it begins to find
-feasible solutions, it switches to a best-first search by changing the node stack to a priority queue
-on the fly. But best-first will not work for some of the harder problem instances
-(such as EIL33 modified with a vehicle capacity of 4000), so there are two configurable thresholds
-to limit whether and when this switch happens.
+The algorithm starts out with a depth-first branch-and-cut search. When the current best-known-solution is close enough
+to the lower bound, it switches to a best-first search by changing the node stack to a priority queue on the fly. But
+best-first will not work for some of the harder problem instances (such as EIL33 modified with a vehicle capacity of
+4000), so there are two configurable thresholds to limit whether and when this switch happens.
 
 See the methods `OjAlgoCVRPSolver.setBestFirstMillis()` and `OjAlgoCVRPSolver.setBestFirstRatio()`
 for those tunables.
 
 ## Why an exact solver, and not heuristic?
 
-The exact solver may be mainly of academic interest, and as a benchmark for heuristics, but it's not entirely out of the
-question to use it in production; exact and heuristic solvers are complementary. This solver starts with a configurable
-heuristic to define the current best-known-solution. (Right now this defaults to the Clarke-Wright algorithm, but if you
-have some code that performs better than the default, a plugin interface is available.)
+This is an educational project. The exact solver may be mainly of academic interest, and as a benchmark for heuristics,
+but it's not entirely out of the question to use it in the real world; exact and heuristic solvers are complementary.
+This solver starts with a configurable heuristic to define the current best-known-solution. (Right now this defaults to
+the Clarke-Wright algorithm, but if you have some code that performs better than the default, a plugin interface is
+available.)
 
 It will then search for a better solution, skipping parts of the search tree which provably cannot be better than
 the current best known solution, until it hits whatever timeout you have set, or it has found the provably optimal
 solution. If it hits the timeout first, it may still have found a better solution. So in a sense, it is both exact and
-approximate, and, the better the starting heuristic, the faster we can get through the branch-and-bound process.
+approximate, and, the better the starting heuristic, the faster we can get through the branch-and-cut process.
 
 This can be extremely fast for the easier problem instances, and generally works well as long as the lower-bound
 function ("RCC-Sep") performs well enough to exclude enough parts of the search tree. That may not be the case for

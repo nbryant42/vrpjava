@@ -15,6 +15,7 @@ import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
 import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
 import static java.lang.Math.min;
@@ -42,6 +43,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
      * <a href="https://github.com/IBMDecisionOptimization/Decision-Optimization-with-CPLEX-samples/blob/master/Vehicle-routing.pdf">here</a>.
      */
     @Test
+    @Disabled
     void eil33() throws IOException {
         // old heuristic 835.2278/1043.1736 (80.07%)
         // new heuristic 835.2278/843.0978 (99.07%)
@@ -49,12 +51,56 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var timeout = 300_000L;
         solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
 
-        assertEquals(new Result(Result.State.OPTIMAL, 837.67155201, Set.of(
+        assertEquals(new Result(OPTIMAL, 837.67155201, Set.of(
                         List.of(0, 1, 15, 26, 27, 16, 28, 29),
                         List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
                         List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
                         List.of(0, 30, 14, 31))),
                 doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+    }
+
+    /**
+     * Like {@link #eil33()}, but rounds the distances to integers for a
+     * direct comparison with most of the academic literature, such as
+     * <a href="https://www.lancaster.ac.uk/staff/letchfoa/articles/2004-cvrp-exact.pdf">Lysgaard et al.</a>
+     * <p>
+     * TODO: Notice that we search more nodes than they do, and our bounds are slightly weaker at the root node
+     * (Lysgaard et al., Table 7). From their paper, it looks like our bounds could be tightened by implementing
+     * multistar inequalities (Table 5) and/or hypotour inequalities (Table 6). The larger number of nodes may also be
+     * due to their odd-edges cut-set branching strategy.
+     */
+    @Test
+    void eil33_rounded() throws IOException {
+        var solver = newSolver();
+        var timeout = 300_000L;
+        solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
+
+        var actual = (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver, true);
+
+        // rounding the distances to integer results in at least 4 equivalent solutions:
+        if (!List.of(
+                new Result(OPTIMAL, 835.0, Set.of(
+                        List.of(0, 1, 15, 26, 27, 16, 28, 29),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
+                        List.of(0, 3, 5, 6, 10, 18, 19, 22, 21, 20, 23, 24, 25, 17, 13),
+                        List.of(0, 30, 14, 31))),
+                new Result(OPTIMAL, 835.0, Set.of(
+                        List.of(0, 1, 15, 26, 27, 16, 28, 29),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
+                        List.of(0, 3, 5, 6, 10, 18, 19, 21, 22, 20, 23, 24, 25, 17, 13),
+                        List.of(0, 30, 14, 31))),
+                new Result(OPTIMAL, 835.0, Set.of(
+                        List.of(0, 1, 15, 26, 27, 28, 16, 29),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
+                        List.of(0, 3, 5, 6, 10, 18, 19, 21, 22, 20, 23, 24, 25, 17, 13),
+                        List.of(0, 30, 14, 31))),
+                new Result(OPTIMAL, 835.0, Set.of(
+                        List.of(0, 1, 15, 26, 27, 28, 16, 29),
+                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
+                        List.of(0, 3, 5, 6, 10, 18, 19, 22, 21, 20, 23, 24, 25, 17, 13),
+                        List.of(0, 30, 14, 31)))).contains(actual)) {
+            fail(actual.toString());
+        }
     }
 
     protected OjAlgoCVRPSolver newSolver() {
@@ -145,7 +191,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     void eil33_reduced() throws IOException {
         // old heuristic 422.81018/477.28214 (88.59%)
         // new heuristic 422.81018/432.9653 (97.65%)
-        assertEquals(new Result(Result.State.OPTIMAL, 428.7145713, Set.of(
+        assertEquals(new Result(OPTIMAL, 428.7145713, Set.of(
                         List.of(0, 2, 12, 11, 10, 9, 8, 7, 6, 5, 4),
                         List.of(0, 3, 13, 1, 14, 15, 16))),
                 doTestEil33(17));
@@ -165,7 +211,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     void eil33_reduced2() throws IOException {
         // old heuristic 499.25424/721.02826 (69.24%)
         // new heuristic 499.25424/595.4756 (83.84%)
-        assertEquals(new Result(Result.State.OPTIMAL, 499.25424343, Set.of(
+        assertEquals(new Result(OPTIMAL, 499.25424343, Set.of(
                         List.of(0, 1, 14, 15, 17, 16, 23, 22, 20, 21, 19, 18, 13, 12),
                         List.of(0, 3, 2, 11, 10, 9, 8, 7, 6, 5, 4))),
                 doTestEil33(24));
@@ -176,7 +222,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     void eil33_reduced3() throws IOException {
         // old heuristic 588.4661/832.13934 (70.72%)
         // new heuristic 588.4661/593.60974 (99.13%)
-        assertEquals(new Result(Result.State.OPTIMAL, 588.46611851, Set.of(
+        assertEquals(new Result(OPTIMAL, 588.46611851, Set.of(
                         List.of(0, 1, 13, 11, 10, 9, 8, 7, 6, 5, 12, 2, 3),
                         List.of(0, 4),
                         List.of(0, 14, 15, 17, 19, 18, 21, 20, 22, 23, 24, 16))),
@@ -202,6 +248,11 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
     private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity,
                                       OjAlgoCVRPSolver solver) throws IOException {
+        return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, solver, false);
+    }
+
+    private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity,
+                                      OjAlgoCVRPSolver solver, boolean round) throws IOException {
         var vrp = TsplibArchive.loadVrpInstance("eil33.vrp");
         var dim = min(vrp.dimension(), limit);
         var costs = new BigDecimal[dim][dim];
@@ -222,7 +273,12 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             var row = costs[i];
 
             for (int j = 0; j < dim; j++) {
-                row[j] = i <= j ? ZERO : BigDecimal.valueOf(getEdgeWeightNonRounded(i, j, nodeCoords)).round(mc);
+                if (i <= j) {
+                    row[j] = ZERO;
+                } else {
+                    row[j] = round ? BigDecimal.valueOf(vrp.getEdgeWeight(i, j)) :
+                            BigDecimal.valueOf(getEdgeWeightNonRounded(i, j, nodeCoords)).round(mc);
+                }
             }
         }
 

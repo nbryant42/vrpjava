@@ -1,6 +1,7 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.Util;
+import com.google.common.collect.Ordering;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
@@ -119,6 +120,15 @@ public abstract class CVRPSolver {
             public boolean isFeasible() {
                 return feasible;
             }
+        }
+
+        @Override
+        public String toString() {
+            return "Result{" +
+                    "state=" + state +
+                    ", objective=" + objective +
+                    ", cycles=" + cycles.stream().sorted(Ordering.natural().lexicographical()).toList() +
+                    '}';
         }
     }
 

@@ -47,6 +47,11 @@
       <artifactId>ojalgo</artifactId>
       <version>55.1.2</version>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>33.4.7-jre</version>
+    </dependency>
 
     <!-- Test dependencies -->
     <dependency>
