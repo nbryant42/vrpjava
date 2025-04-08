@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.github.vrpjava.Util.setUpHardware_14700;
+import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolverTest.getEdgeWeightNonRounded;
 import static java.lang.Math.min;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class IterativeRowGenCVRPSolverTest {
     @BeforeAll
     static void setUp() {
-        setUpHardware_14700();
+        setUpHardware_raptorLake();
     }
 
     @Test

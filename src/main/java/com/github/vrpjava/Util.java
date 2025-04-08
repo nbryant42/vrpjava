@@ -139,23 +139,38 @@ public class Util {
     }
 
     /**
-     * Variant of {@link #setUpHardware()} hardcoded for my Core i7-14700KF.
+     * Variant of {@link #setUpHardware()} optimized for my Core i7-14700KF.
      * <p>
      * This is a hybrid processor, so I'm going for the lowest common denominator of cache sizes between the
      * P-cores and E-cores, and faking it a little bit by telling ojAlgo that we have 20 cores and threads
-     * (actually there are 20 cores and 28 threads, but this can't be divided by two.) I haven't really investigated
-     * whether this is the best approach.
+     * (actually there are 20 cores and 28 threads, but this can't be divided by two.) I haven't really benchmarked
+     * whether this is the best approach, but it's a more reasonable starting point than the defaults.
+     * <p>
+     * This auto-detection logic avoids doing anything for the CPUs with power-of-two thread counts,
+     * because those could be confused with traditional CPUs.
+     * <p>
+     * Currently called from the unit tests, but nowhere else by default.
      */
-    public static void setUpHardware_14700() {
+    public static void setUpHardware_raptorLake() {
+        if ("x86_64".equals(VirtualMachine.getArchitecture())) {
+            switch (Runtime.getRuntime().availableProcessors()) {
+                case 28 -> setUpRaptorLake(20, 33L); // Core i7-14700 desktop
+                case 24 -> setUpRaptorLake(16, 30L); // Core i7-13700 desktop
+                case 20 -> setUpRaptorLake(14, 24L); // Core i5 14500-14600 desktop
+            }
+        }
+    }
+
+    private static void setUpRaptorLake(int cores, long l3) {
         System.setProperty("shut.up.ojAlgo", "");
 
         var tmpL1Machine = new BasicMachine(32L * K, 1);
         var tmpL2Machine = new BasicMachine(4096L * K, 4);
-        var tmpL3Machine = new BasicMachine(33L * K * K, 20); // CCX
-        var tmpSystemMachine = new BasicMachine(VirtualMachine.getMemory(), 20);
+        var tmpL3Machine = new BasicMachine(l3 * K * K, cores);
+        var tmpSystemMachine = new BasicMachine(VirtualMachine.getMemory(), cores);
 
         BasicMachine[] levels = {tmpSystemMachine, tmpL3Machine, tmpL2Machine, tmpL1Machine};
-        OjAlgoUtils.ENVIRONMENT = new Hardware(VirtualMachine.getArchitecture(), levels).virtualise();
+        OjAlgoUtils.ENVIRONMENT = new Hardware("x86_64", levels).virtualise();
     }
 
     /**

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.github.vrpjava.Util.setUpHardware_14700;
+import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
 import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
@@ -29,7 +29,7 @@ import static org.ojalgo.optimisation.Optimisation.State.UNEXPLORED;
 class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @BeforeAll
     static void setUp() {
-        setUpHardware_14700();
+        setUpHardware_raptorLake();
     }
 
     /**
