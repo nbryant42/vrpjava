@@ -18,6 +18,9 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
 
+/**
+ * Multithreading is not implemented yet, but when it is, this class will contain all the worker-thread logic.
+ */
 final class Worker {
     private final Job job;
 
@@ -42,27 +45,45 @@ final class Worker {
             return; // fathom the node.
         }
 
-        // branch on the fractional variable with the smallest rounding gap to the nearest integer.
-        var frac = IntStream.range(0, (int) nodeResult.count())
+        var stream = IntStream.range(0, (int) nodeResult.count())
                 .mapToObj(i -> {
                     var v = nodeResult.get(i);
                     v = v.setScale(0, RoundingMode.HALF_EVEN).subtract(v).abs();
                     return new AbstractMap.SimpleImmutableEntry<>(i, v);
                 })
-                .filter(entry -> entry.getValue().signum() > 0)
-                .min(Map.Entry.comparingByValue());
+                .filter(entry -> entry.getValue().signum() > 0);
 
-        if (frac.isPresent()) {
-            var k = frac.get().getKey();
-            var gap = frac.get().getValue();
+        // If we're in best-first mode, branch on the fractional variable with the largest rounding gap to the nearest
+        // integer (e.g. closest to 0.5), which should result in a more balanced search tree and more consistent runtime
+        // to solve the problem to optimality.
+        // But if we're in depth-first mode, use the smallest. I don't know... this is the opposite of what most of the
+        // published algorithms are doing, but it seems to find interesting local minima more quickly (a variable set to
+        // 0.9 in the LP relaxation, for example, seems likely to "want" to be set to 1.0, so, try that first.)
+        // "Find local minima quickly" is our goal when we are in depth-first mode because we don't necessarily expect
+        // to have time to solve the whole problem to optimality, but we want an improved solution at least.
+        var optional = job.isBestFirst() ? stream.max(Map.Entry.comparingByValue()) :
+                stream.min(Map.Entry.comparingByValue());
+
+        if (optional.isPresent()) {
+            var k = optional.get().getKey();
             var v = nodeResult.get(k);
             var closest = v.setScale(0, RoundingMode.HALF_EVEN);
             var other = closest.compareTo(v) > 0 ? closest.subtract(ONE) : closest.add(ONE);
 
-            // queue two child nodes with variable fixed to `closest` and `other`.
-            // queue the closest gap last, so it's on top of stack (if it's a LIFO queue)
-            job.queueNode(node, ub, k, other, gap);
-            job.queueNode(node, ub, k, closest, gap);
+            // Queue two child nodes with the decision variable fixed to `closest` and `other`.
+            // Also, queue the closest gap last, so it's on top of stack (if it's a LIFO queue.)
+            //
+            // This is a bit subtle, and warrants some discussion: this ordering only seems to affect the algorithm
+            // performance when we are in depth-first mode. It's a bit hard to tell; the signal-to-noise ratio is bad,
+            // because ojAlgo's performance is highly variable: I suspect that due to multithreading and/or
+            // randomization, it never finds the same results in the same amount of time (but that's not necessarily a
+            // bug, because the problems we're feeding it often have multiple solutions with the same objective value,
+            // especially in the LP relaxation.)
+            //
+            // When we're in best-first mode, we sort by the lower bound, rather than the fractional rounding gap; the
+            // ordering of these two lines of code does not affect that, but it does affect depth-first mode.
+            job.queueNode(node, ub, k, other);
+            job.queueNode(node, ub, k, closest);
         } else {
             job.reportSolution(job.getGlobalBoundsResult(), nodeResult);
         }

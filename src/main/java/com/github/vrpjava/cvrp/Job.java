@@ -24,6 +24,10 @@ import static java.lang.Double.POSITIVE_INFINITY;
 import static java.math.BigDecimal.ZERO;
 import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
+/**
+ * Multithreading is not implemented yet, but when it is, this class will represent a single processing job that we
+ * register with a thread scheduler, and function as the coordination point for worker threads.
+ */
 class Job {
     private final OjAlgoCVRPSolver solver;
     private final BigDecimal vehicleCapacity;
@@ -96,7 +100,7 @@ class Job {
         state = kickstarter.state();
 
         // the root node has no variables fixed.
-        queue.add(new Node(globalBounds.getResult(deadline).getValue(), ZERO, Map.of()));
+        queue.add(new Node(globalBounds.getResult(deadline).getValue(), Map.of()));
 
         for (; !done && deadline > System.currentTimeMillis(); nodes++) {
             var node = queue.poll();
@@ -155,10 +159,10 @@ class Job {
         solver.debug("Currently " + count + " cuts.");
     }
 
-    void queueNode(Node parent, double ub, Integer k, BigDecimal v, BigDecimal gap) {
+    void queueNode(Node parent, double ub, Integer k, BigDecimal v) {
         var childVars = new HashMap<>(parent.vars());
         childVars.put(k, v);
-        queue.add(new Node(ub, gap, childVars));
+        queue.add(new Node(ub, childVars));
     }
 
     /**
@@ -214,5 +218,9 @@ class Job {
         OjAlgoCVRPSolver.addCut(demands.length, globalBounds.getModel(), subset, name, minVehicles);
         // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
         globalBounds.clearResult();
+    }
+
+    boolean isBestFirst() {
+        return queue instanceof PriorityQueue<Node>;
     }
 }
