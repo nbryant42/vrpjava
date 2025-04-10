@@ -21,6 +21,7 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.toSeconds;
 import static com.github.vrpjava.cvrp.Worker.updateBounds;
 import static java.lang.Double.POSITIVE_INFINITY;
+import static java.lang.Math.max;
 import static java.math.BigDecimal.ZERO;
 import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
@@ -36,6 +37,7 @@ class Job {
     private final long deadline;
     private final Result kickstarter;
     private final GlobalBounds globalBounds;
+    private final int maxScale;
     private boolean done;
     private double bestKnown;
     private Queue<Node> queue;
@@ -52,6 +54,21 @@ class Job {
         this.kickstarter = solver.getHeuristic().doSolve(minVehicles, vehicleCapacity, demands, costMatrix,
                 timeout);
         this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline);
+        this.maxScale = maxScale(costMatrix);
+    }
+
+    private static int maxScale(BigDecimal[][] costMatrix) {
+        var size = costMatrix.length;
+        var max = Integer.MIN_VALUE;
+
+        for (var row = 1; row < size; row++) {
+            var costRow = costMatrix[row];
+
+            for (var col = 0; col < row; col++) {
+                max = max(max, costRow[col].stripTrailingZeros().scale());
+            }
+        }
+        return max;
     }
 
     static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
@@ -171,10 +188,11 @@ class Job {
      * @return either an updated queue (if changing the strategy) or the existing queue unmodified
      */
     private Queue<Node> evaluateStrategy(double lb, double ub, long start, Queue<Node> queue, String descriptor) {
+        lb = BigDecimal.valueOf(lb).setScale(maxScale, RoundingMode.CEILING).doubleValue();
         var ratio = lb / ub;
         var elapsed = System.currentTimeMillis() - start;
-        var suffix = (float) lb + "/" + (float) ub + " (" +
-                BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) + "%)";
+        var suffix = lb + "/" + ub + " (" + BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) +
+                "%)";
 
         if (!(queue instanceof PriorityQueue<Node>) && ratio > solver.getBestFirstRatio() &&
                 elapsed < solver.getBestFirstMillis()) {
@@ -208,6 +226,10 @@ class Job {
 
     long getDeadline() {
         return deadline;
+    }
+
+    int maxScale() {
+        return maxScale;
     }
 
     Optimisation.Result getGlobalBoundsResult() {

@@ -31,7 +31,7 @@ final class Worker {
     void process(Node node) {
         // double-check the parent node's bound before we go any further; the best-known solution may have
         // improved since it was queued.
-        if (node.bound() >= job.getBestKnown()) {
+        if (shouldFathom(node.bound())) {
             return; // fathom the node.
         }
         var nodeModel = job.copyGlobalBoundsModel();
@@ -41,7 +41,7 @@ final class Worker {
         var ub = nodeResult.getValue();
 
         // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
-        if (!nodeResult.getState().isOptimal() || ub >= job.getBestKnown()) {
+        if (!nodeResult.getState().isOptimal() || shouldFathom(ub)) {
             return; // fathom the node.
         }
 
@@ -87,6 +87,15 @@ final class Worker {
         } else {
             job.reportSolution(job.getGlobalBoundsResult(), nodeResult);
         }
+    }
+
+    /**
+     * Check the bounds to determine whether we should fathom the node. Additionally, use knowledge of the decimal
+     * precision of our costs to tighten the bounds via rounding up.
+     */
+    private boolean shouldFathom(double lb) {
+        return BigDecimal.valueOf(lb).setScale(job.maxScale(), RoundingMode.CEILING).doubleValue()
+                >= job.getBestKnown();
     }
 
     /**

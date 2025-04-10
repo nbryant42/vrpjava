@@ -135,10 +135,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     }
 
     static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long minVehicles) {
-        // TODO not sure whether `n` should be `size` or `size-1` here. Number of nodes or number of customers?
-        // This formula comes from the paper. Figure out the derivation.
-        // (If we get this wrong, the results are still correct but our code is just a little slow.)
-        if (subset.size() < size * (size + 1) / (2 * size - 2)) {
+        if (subset.size() <= size * (size + 1) / (2 * size - 2)) {
             // Use constraint form (1.3)
 
             var cut = model.newExpression(name).upper(subset.size() - minVehicles);
