@@ -1,6 +1,7 @@
 package com.github.vrpjava.cvrp;
 
 import io.github.lmores.tsplib.TsplibArchive;
+import io.github.lmores.tsplib.vrp.VrpInstance;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -233,10 +234,6 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                                       OjAlgoCVRPSolver solver, boolean round) throws IOException {
         var vrp = TsplibArchive.loadVrpInstance("eil33.vrp");
         var dim = min(vrp.dimension(), limit);
-        var costs = new BigDecimal[dim][dim];
-        var nodeCoords = vrp.nodeCoords();
-        // round to 9 to more closely match the way this is handled in eil33-2 from MIPLIB.
-        var mc = new MathContext(9, RoundingMode.HALF_EVEN);
 
         System.out.println(vrp);
 
@@ -246,6 +243,25 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                         1300, 700, 750, 1400, 4000, 600, 1000, 500, 2500, 1700, 1100)
                 .limit(dim)
                 .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
+
+        var costs = buildCosts(round, dim, vrp);
+        var capacity = BigDecimal.valueOf(vehicleCapacity);
+        var minVehicles = 1;
+        var start = System.currentTimeMillis();
+        var result = boundsOnly ?
+                initBounds(minVehicles, capacity, demands, costs, start + timeoutMillis) :
+                solver.solve(minVehicles, capacity, demands, costs, timeoutMillis);
+
+        System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
+
+        return result;
+    }
+
+    private static BigDecimal[][] buildCosts(boolean round, int dim, VrpInstance vrp) {
+        // round to 9 to more closely match the way this is handled in eil33-2 from MIPLIB.
+        var mc = new MathContext(9, RoundingMode.HALF_EVEN);
+        var nodeCoords = vrp.nodeCoords();
+        var costs = new BigDecimal[dim][dim];
 
         for (int i = 0; i < dim; i++) {
             var row = costs[i];
@@ -259,13 +275,40 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 }
             }
         }
+        return costs;
+    }
 
-        var capacity = BigDecimal.valueOf(vehicleCapacity);
+    //solves to optimality, but rather slowly (~125s)
+    @Test
+    @Disabled
+    void eil51() throws IOException {
+        var solver = newSolver();
+        solver.setBestFirstRatio(0.85);
+
+        var timeout = 600_000L;
+        var actual = doTestEil51(solver, timeout);
+
+        assertTrue(582.0 >= actual.objective());
+    }
+
+
+    Result doTestEil51(CVRPSolver solver, long timeout) throws IOException {
+        var vrp = TsplibArchive.loadVrpInstance("eil51.vrp");
+        var dim = vrp.dimension();
+
+        System.out.println(vrp);
+
+        var demands = IntStream.of(0, 7, 30, 16, 9, 21, 15, 19, 23, 11, 5, 19, 29, 23, 21, 10, 15, 3, 41, 9, 28, 8, 8,
+                        16, 10, 28, 7, 15, 14, 6, 19, 11, 12, 23, 26, 17, 6, 9, 15, 14, 7, 27, 13, 11, 16, 10, 5, 25,
+                        17, 18, 10)
+                .limit(dim)
+                .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
+
+        var costs = buildCosts(true, dim, vrp);
+        var capacity = BigDecimal.valueOf(160);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
-        var result = boundsOnly ?
-                initBounds(minVehicles, capacity, demands, costs, start + timeoutMillis) :
-                solver.solve(minVehicles, capacity, demands, costs, timeoutMillis);
+        var result = solver.solve(minVehicles, capacity, demands, costs, timeout);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 
