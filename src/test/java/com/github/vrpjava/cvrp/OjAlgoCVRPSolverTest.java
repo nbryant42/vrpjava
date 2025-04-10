@@ -285,7 +285,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var solver = newSolver();
         solver.setBestFirstRatio(0.85);
 
-        var timeout = 600_000L;
+        var timeout = 300_000L;
         var actual = doTestEil51(solver, timeout);
 
         assertTrue(582.0 >= actual.objective());

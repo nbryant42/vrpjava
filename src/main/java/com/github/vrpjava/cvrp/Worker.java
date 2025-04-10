@@ -37,7 +37,7 @@ final class Worker {
         var nodeModel = job.copyGlobalBoundsModel();
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
-        var nodeResult = weakUpdateBounds(nodeModel);
+        var nodeResult = node.depth() == 1 ? updateBounds(nodeModel) : weakUpdateBounds(nodeModel);
         var ub = nodeResult.getValue();
 
         // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
@@ -154,12 +154,14 @@ final class Worker {
             // if there are no fractional variables, this is a candidate solution, but we don't know for sure until
             // we've validated that it satisfies the full set of constraints, so iterate on additional cuts.
             // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
-            return isInvalidIntegerSolution(result) ?
-                    updateBounds(job.getVehicleCapacity(), job.getDemands(), model, job, job.getDeadline()) :
-                    result;
+            return isInvalidIntegerSolution(result) ? updateBounds(model) : result;
         }
 
         return result; // infeasible or timed out.
+    }
+
+    private Optimisation.Result updateBounds(ExpressionsBasedModel model) {
+        return updateBounds(job.getVehicleCapacity(), job.getDemands(), model, job, job.getDeadline());
     }
 
     // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.

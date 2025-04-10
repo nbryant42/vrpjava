@@ -117,7 +117,7 @@ class Job {
         state = kickstarter.state();
 
         // the root node has no variables fixed.
-        queue.add(new Node(globalBounds.getResult(deadline).getValue(), Map.of()));
+        queue.add(new Node(0, globalBounds.getResult(deadline).getValue(), Map.of()));
 
         for (; !done && deadline > System.currentTimeMillis(); nodes++) {
             var node = queue.poll();
@@ -179,7 +179,7 @@ class Job {
     void queueNode(Node parent, double ub, Integer k, BigDecimal v) {
         var childVars = new HashMap<>(parent.vars());
         childVars.put(k, v);
-        queue.add(new Node(ub, childVars));
+        queue.add(new Node(parent.depth() + 1, ub, childVars));
     }
 
     /**
@@ -188,7 +188,6 @@ class Job {
      * @return either an updated queue (if changing the strategy) or the existing queue unmodified
      */
     private Queue<Node> evaluateStrategy(double lb, double ub, long start, Queue<Node> queue, String descriptor) {
-        lb = BigDecimal.valueOf(lb).setScale(maxScale, RoundingMode.CEILING).doubleValue();
         var ratio = lb / ub;
         var elapsed = System.currentTimeMillis() - start;
         var suffix = lb + "/" + ub + " (" + BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) +
