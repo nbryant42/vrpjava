@@ -55,7 +55,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     public OjAlgoCVRPSolver() {
     }
 
-    private double bestFirstRatio = 0.95;
+    private double bestFirstRatio = 0.85;
     private long bestFirstMillis = 30_000L;
     private CVRPSolver heuristic = new ClarkeWrightCVRPSolver();
 

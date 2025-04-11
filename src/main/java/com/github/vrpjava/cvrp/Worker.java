@@ -7,7 +7,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.AbstractMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -17,6 +16,8 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
+import static java.util.Comparator.comparing;
+import static java.util.Map.Entry.comparingByValue;
 
 /**
  * Multithreading is not implemented yet, but when it is, this class will contain all the worker-thread logic.
@@ -31,38 +32,43 @@ final class Worker {
     void process(Node node) {
         // double-check the parent node's bound before we go any further; the best-known solution may have
         // improved since it was queued.
-        if (shouldFathom(node.bound())) {
+        if (node.bound() >= job.getBestKnown()) {
             return; // fathom the node.
         }
         var nodeModel = job.copyGlobalBoundsModel();
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
         var nodeResult = node.depth() == 1 ? updateBounds(nodeModel) : weakUpdateBounds(nodeModel);
-        var ub = nodeResult.getValue();
+        var nodeBound = roundBound(nodeResult.getValue());
 
         // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
-        if (!nodeResult.getState().isOptimal() || shouldFathom(ub)) {
+        if (!nodeResult.getState().isOptimal() || nodeBound >= job.getBestKnown()) {
             return; // fathom the node.
         }
 
         var stream = IntStream.range(0, (int) nodeResult.count())
                 .mapToObj(i -> {
                     var v = nodeResult.get(i);
-                    v = v.setScale(0, RoundingMode.HALF_EVEN).subtract(v).abs();
-                    return new AbstractMap.SimpleImmutableEntry<>(i, v);
+                    return new AbstractMap.SimpleImmutableEntry<>(i,
+                            v.setScale(0, RoundingMode.HALF_EVEN).subtract(v).abs());
                 })
                 .filter(entry -> entry.getValue().signum() > 0);
 
-        // If we're in best-first mode, branch on the fractional variable with the largest rounding gap to the nearest
-        // integer (e.g. closest to 0.5), which should result in a more balanced search tree and more consistent runtime
-        // to solve the problem to optimality.
-        // But if we're in depth-first mode, use the smallest. I don't know... this is the opposite of what most of the
-        // published algorithms are doing, but it seems to find interesting local minima more quickly (a variable set to
-        // 0.9 in the LP relaxation, for example, seems likely to "want" to be set to 1.0, so, try that first.)
-        // "Find local minima quickly" is our goal when we are in depth-first mode because we don't necessarily expect
-        // to have time to solve the whole problem to optimality, but we want an improved solution at least.
-        var optional = job.isBestFirst() ? stream.max(Map.Entry.comparingByValue()) :
-                stream.min(Map.Entry.comparingByValue());
+        // If we're in best-first mode, we want to branch on the fractional variable as close to 0.5 as possible and
+        // with the largest possible coefficient in the objective function.
+        // This should result in a more balanced search tree and more consistent runtime to solve the problem to
+        // optimality.
+        //
+        // But if we're in depth-first mode, use the fractional variable closest to the nearest integer. I don't know...
+        // this is the opposite of what most of the published algorithms are doing, but it seems to find interesting
+        // local minima more quickly (a variable set to 0.9 in the LP relaxation, for example, seems likely to "want" to
+        // be set to 1.0, so, try that first.) "Find local minima quickly" is our goal when we are in depth-first mode
+        // because we don't necessarily expect to have time to solve the whole problem to optimality, but we want an
+        // improved solution at least.
+        var optional = job.isBestFirst() ?
+                stream.max(comparing(entry ->
+                        entry.getValue().multiply(nodeModel.getVariable(entry.getKey()).getContributionWeight()))) :
+                stream.min(comparingByValue());
 
         if (optional.isPresent()) {
             var k = optional.get().getKey();
@@ -82,20 +88,19 @@ final class Worker {
             //
             // When we're in best-first mode, we sort by the lower bound, rather than the fractional rounding gap; the
             // ordering of these two lines of code does not affect that, but it does affect depth-first mode.
-            job.queueNode(node, ub, k, other);
-            job.queueNode(node, ub, k, closest);
+            job.queueNode(node, nodeBound, k, other);
+            job.queueNode(node, nodeBound, k, closest);
         } else {
             job.reportSolution(job.getGlobalBoundsResult(), nodeResult);
         }
     }
 
     /**
-     * Check the bounds to determine whether we should fathom the node. Additionally, use knowledge of the decimal
-     * precision of our costs to tighten the bounds via rounding up.
+     * If all costs are integer, the bound can be tightened by rounding up to the nearest integer.
+     * (We generalize this to any level of precision.)
      */
-    private boolean shouldFathom(double lb) {
-        return BigDecimal.valueOf(lb).setScale(job.maxScale(), RoundingMode.CEILING).doubleValue()
-                >= job.getBestKnown();
+    private double roundBound(double lb) {
+        return BigDecimal.valueOf(lb).setScale(job.maxScale(), RoundingMode.CEILING).doubleValue();
     }
 
     /**

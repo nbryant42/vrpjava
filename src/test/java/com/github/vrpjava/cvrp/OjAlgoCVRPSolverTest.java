@@ -127,6 +127,17 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         }
     }
 
+    @Test
+    @Disabled
+    void eil33_moreVehicles_rounded() throws IOException {
+        var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 3_600_000L, 4000, newSolver(), true);
+
+        double v = 1531.0;
+        if (r.objective() > v) {
+            fail("Objective > " + v);
+        }
+    }
+
     // slow, and doesn't always find the same bound.
     @Test
     @Disabled
@@ -282,13 +293,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @Test
     @Disabled
     void eil51() throws IOException {
-        var solver = newSolver();
-        solver.setBestFirstRatio(0.85);
-
         var timeout = 300_000L;
-        var actual = doTestEil51(solver, timeout);
-
-        assertTrue(582.0 >= actual.objective());
+        assertTrue(582.0 >= doTestEil51(newSolver(), timeout).objective());
     }
 
 

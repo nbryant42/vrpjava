@@ -43,6 +43,7 @@ class Job {
     private Queue<Node> queue;
     private Result.State state;
     private Optimisation.Result incumbent;
+    private int nodes;
 
     public Job(OjAlgoCVRPSolver solver, int minVehicles, BigDecimal vehicleCapacity,
                BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
@@ -92,17 +93,15 @@ class Job {
                 var myState = globalBounds.getResult(deadline).getState() == INFEASIBLE ? Result.State.INFEASIBLE :
                         Result.State.UNEXPLORED;
 
-                return buildResult(myState, demands, null, kickstarter, 0, globalBounds, bestKnown);
+                return buildResult(myState, null, 0);
             }
         } else {
             bestKnown = kickstarter.objective();
 
             if (!globalBounds.getResult(deadline).getState().isOptimal()) {
-                return buildResult(Result.State.HEURISTIC, demands, null, kickstarter, 0, globalBounds, bestKnown);
+                return buildResult(Result.State.HEURISTIC, null, 0);
             }
         }
-
-        logCutCount(globalBounds);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
         // of variable IDs and values to be fixed in the model.
@@ -112,7 +111,6 @@ class Job {
         // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
         queue = evaluateStrategy(globalBounds.getResult(deadline).getValue(), bestKnown, start,
                 Collections.asLifoQueue(new ArrayDeque<>()), "Initial");
-        var nodes = 0;
         var worker = new Worker(this);
         state = kickstarter.state();
 
@@ -132,7 +130,7 @@ class Job {
             }
         }
 
-        return buildResult(state, demands, incumbent, kickstarter, nodes, globalBounds, bestKnown);
+        return buildResult(state, incumbent, nodes);
     }
 
     void reportSolution(Optimisation.Result globalBoundsResult, Optimisation.Result nodeResult) {
@@ -152,13 +150,7 @@ class Job {
         }
     }
 
-    private Result buildResult(Result.State myState,
-                               BigDecimal[] demands,
-                               Optimisation.Result incumbent,
-                               Result kickstarter,
-                               int nodes,
-                               GlobalBounds globalBounds,
-                               double bestKnown) {
+    private Result buildResult(Result.State myState, Optimisation.Result incumbent, int nodes) {
         var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
 
         solver.debug(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
@@ -166,20 +158,19 @@ class Job {
                 .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                 .toList();
         solver.debug("Cycle demands: " + cycleDemands);
-        logCutCount(globalBounds);
+        solver.debug("Currently " + countCuts() + " cuts.");
 
         return new Result(myState, bestKnown, cycles);
     }
 
-    private void logCutCount(GlobalBounds globalBounds) {
-        var count = globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
-        solver.debug("Currently " + count + " cuts.");
+    private long countCuts() {
+        return globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
     }
 
-    void queueNode(Node parent, double ub, Integer k, BigDecimal v) {
+    void queueNode(Node parent, double nodeBound, Integer k, BigDecimal v) {
         var childVars = new HashMap<>(parent.vars());
         childVars.put(k, v);
-        queue.add(new Node(parent.depth() + 1, ub, childVars));
+        queue.add(new Node(parent.depth() + 1, nodeBound, childVars));
     }
 
     /**
@@ -191,7 +182,7 @@ class Job {
         var ratio = lb / ub;
         var elapsed = System.currentTimeMillis() - start;
         var suffix = lb + "/" + ub + " (" + BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) +
-                "%)";
+                "%); " + countCuts() + " cuts, " + nodes + " nodes.";
 
         if (!(queue instanceof PriorityQueue<Node>) && ratio > solver.getBestFirstRatio() &&
                 elapsed < solver.getBestFirstMillis()) {
