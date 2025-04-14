@@ -1,5 +1,6 @@
 package com.github.vrpjava.cvrp;
 
+import org.jspecify.annotations.NonNull;
 import org.ojalgo.netio.BasicLogger;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -26,7 +27,10 @@ import static java.util.stream.Collectors.toSet;
 import static org.ojalgo.function.constant.BigMath.HALF;
 
 /**
- * Solver for the Capacitated Vehicle Routing Problem (CVRP).
+ * Service facade for the ojAlgo-based solver for the Capacitated Vehicle Routing Problem (CVRP).
+ * <p>
+ * Each instance of this service maintains a thread pool, so it is probably best to manage one instance of this class
+ * as a singleton, for example in a Spring ApplicationContext or similar.
  * <p>
  * This is a lazily bounded, branch-and-bound-and-cut exact algorithm based on:
  *
@@ -45,7 +49,8 @@ import static org.ojalgo.function.constant.BigMath.HALF;
  * @see <a href="https://repub.eur.nl/pub/135594/EI2021-01.pdf">This PDF</a> for proofs on the LP bound
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper</a>
  */
-public class OjAlgoCVRPSolver extends CVRPSolver {
+public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
+    private final Scheduler scheduler = new Scheduler();
     private static final BigDecimal MINUS_HALF = HALF.negate();
     private boolean debug;
 
@@ -196,6 +201,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
 
     private record Target(int node, BigDecimal count) {
         @Override
+        @NonNull
         public String toString() {
             return count.compareTo(ONE) == 0 ? Integer.toString(node) : (node + "x" + count);
         }
@@ -564,5 +570,18 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
      */
     public void setDebug(boolean debug) {
         this.debug = debug;
+    }
+
+    void register(Job job) {
+        scheduler.register(job);
+    }
+
+    void deregister(Job job) {
+        scheduler.deregister(job);
+    }
+
+    @Override
+    public void close() {
+        scheduler.close();
     }
 }

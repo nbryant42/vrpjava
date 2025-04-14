@@ -2,6 +2,7 @@ package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.Util;
 import com.google.common.collect.Ordering;
+import org.jspecify.annotations.NonNull;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
@@ -27,7 +28,7 @@ import static java.util.stream.IntStream.range;
  * <code>minVehicles == maxVehicles</code>, so as a side effect of cost
  * minimization, the number of vehicles used will also be minimized.
  */
-public abstract class CVRPSolver {
+public abstract class CVRPSolver implements AutoCloseable {
     /**
      * Default constructor.
      */
@@ -123,6 +124,7 @@ public abstract class CVRPSolver {
         }
 
         @Override
+        @NonNull
         public String toString() {
             return "Result{" +
                     "state=" + state +
@@ -244,4 +246,15 @@ public abstract class CVRPSolver {
                                       BigDecimal[] demands,
                                       BigDecimal[][] costMatrix,
                                       long timeout);
+
+    /**
+     * This default implementation does nothing. Subclasses should override it if they need {@link AutoCloseable}
+     * behavior.
+     * <p>
+     * API consumers who hold a generic reference to this class should use a try-with-resources block, in case the
+     * concrete subclass requires cleanup, for example to shut down a thread pool.
+     */
+    @Override
+    public void close() {
+    }
 }
