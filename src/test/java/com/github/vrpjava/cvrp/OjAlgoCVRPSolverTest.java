@@ -289,7 +289,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         return costs;
     }
 
-    //solves to optimality, but rather slowly (~125s)
+    //solves to optimality, but rather slowly (~35-60s)
     @Test
     @Disabled
     void eil51() throws IOException {
