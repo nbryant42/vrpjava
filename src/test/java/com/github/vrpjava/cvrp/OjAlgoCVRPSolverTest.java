@@ -294,7 +294,10 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @Disabled
     void eil51() throws IOException {
         var timeout = 300_000L;
-        assertTrue(582.0 >= doTestEil51(newSolver(), timeout).objective());
+        var result = doTestEil51(newSolver(), timeout);
+
+        assertEquals(OPTIMAL, result.state());
+        assertEquals(521.0, result.objective());
     }
 
 

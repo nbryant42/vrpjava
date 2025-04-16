@@ -1,6 +1,8 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.cvrp.CVRPSolver.Result;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
+import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
@@ -9,12 +11,15 @@ import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static com.github.vrpjava.Util.newModel;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.addCut;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildConstraints;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildVars;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
@@ -30,9 +35,13 @@ import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
  * register with a thread scheduler, and function as the coordination point for worker threads.
  */
 class Job {
+    private static final int PRUNE_INTERVAL = 50;
+
     private final OjAlgoCVRPSolver solver;
+    private final int minVehicles;
     private final BigDecimal vehicleCapacity;
     private final BigDecimal[] demands;
+    private final BigDecimal[][] costMatrix;
     private final long start;
     private final long deadline;
     private final Result kickstarter;
@@ -49,8 +58,10 @@ class Job {
                BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
         this.start = System.currentTimeMillis();
         this.solver = solver;
+        this.minVehicles = minVehicles;
         this.vehicleCapacity = vehicleCapacity;
         this.demands = demands;
+        this.costMatrix = costMatrix;
         this.deadline = start + timeout;
         this.kickstarter = solver.getHeuristic().doSolve(minVehicles, vehicleCapacity, demands, costMatrix,
                 timeout);
@@ -80,7 +91,41 @@ class Job {
         buildConstraints(model, minVehicles, vars);
         model.relax();
 
-        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
+        var cuts = new HashSet<Cut>();
+        var result = updateBounds(vehicleCapacity, demands, model, null, deadline, cuts);
+        var prunedModel = pruneCuts(minVehicles, costMatrix, cuts, model, result, deadline);
+
+        return new GlobalBounds(prunedModel, cuts, result);
+    }
+
+    // Find all cuts that have positive slack and prune them from the LP model, but keep them cached in the pool.
+    private static ExpressionsBasedModel pruneCuts(int minVehicles, BigDecimal[][] costMatrix, Set<Cut> cuts,
+                                                   ExpressionsBasedModel model, Optimisation.Result result,
+                                                   long deadline) {
+        var size = costMatrix.length;
+        var prunedModel = newModel(deadline);
+        var prunedVars = buildVars(costMatrix, prunedModel);
+
+        buildConstraints(prunedModel, minVehicles, prunedVars);
+        prunedModel.relax();
+
+        cuts.stream().filter(cut -> isBinding(model, result, cut)).forEach(cut -> addCut(size, prunedModel, cut));
+        return prunedModel;
+    }
+
+    // ojAlgo seems to get stuck in a loop when we format cuts with slack variables, so just calculate the slack
+    static boolean isBinding(ExpressionsBasedModel model, Optimisation.Result result, Cut cut) {
+        var expr = model.getExpression(cut.name());
+        if (expr == null) {
+            return false;
+        }
+        var sum = ZERO;
+
+        for (int i = model.countVariables() - 1; i >= 0; i--) {
+            var v = model.getVariable(i);
+            sum = sum.add(expr.get(v).multiply(result.get(i)));
+        }
+        return sum.compareTo(expr.getUpperLimit()) >= 0;
     }
 
     Result run() {
@@ -114,10 +159,10 @@ class Job {
         var worker = new Worker(this);
         state = kickstarter.state();
 
-        // the root node has no variables fixed.
-        queue.add(new Node(0, globalBounds.getResult(deadline).getValue(), Map.of()));
+        // the root node has no variables fixed
+        queue.add(new Node(0, globalBounds.getResult(deadline).getValue(), Map.of(), globalBounds.getCuts()));
 
-        for (; !done && deadline > System.currentTimeMillis(); nodes++) {
+        while (!done && deadline > System.currentTimeMillis()) {
             var node = queue.poll();
 
             if (node == null) {
@@ -126,6 +171,9 @@ class Job {
                 }
                 done = true;
             } else {
+                if (++nodes % PRUNE_INTERVAL == 0) {
+                    globalBounds.pruneCuts(this);
+                }
                 worker.process(node);
             }
         }
@@ -164,13 +212,17 @@ class Job {
     }
 
     private long countCuts() {
-        return globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
+        return cuts(globalBounds.getModel()).count();
     }
 
-    void queueNode(Node parent, double nodeBound, Integer k, BigDecimal v) {
+    private static Stream<Expression> cuts(ExpressionsBasedModel model) {
+        return model.getExpressions().stream().filter(e -> e.getName().startsWith("cut:"));
+    }
+
+    void queueNode(Node parent, double nodeBound, Integer k, BigDecimal v, Set<Cut> bindingCuts) {
         var childVars = new HashMap<>(parent.vars());
         childVars.put(k, v);
-        queue.add(new Node(parent.depth() + 1, nodeBound, childVars));
+        queue.add(new Node(parent.depth() + 1, nodeBound, childVars, bindingCuts));
     }
 
     /**
@@ -182,7 +234,7 @@ class Job {
         var ratio = lb / ub;
         var elapsed = System.currentTimeMillis() - start;
         var suffix = lb + "/" + ub + " (" + BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) +
-                "%); " + countCuts() + " cuts, " + nodes + " nodes.";
+                "%); " + countCuts() + "/" + globalBounds.cutPoolSize() + " active/pooled cuts, " + nodes + " nodes.";
 
         if (!(queue instanceof PriorityQueue<Node>) && ratio > solver.getBestFirstRatio() &&
                 elapsed < solver.getBestFirstMillis()) {
@@ -203,7 +255,7 @@ class Job {
     }
 
     ExpressionsBasedModel copyGlobalBoundsModel() {
-        return globalBounds.getModel().copy(true, false);
+        return globalBounds.getModel().copy();
     }
 
     BigDecimal getVehicleCapacity() {
@@ -222,17 +274,27 @@ class Job {
         return maxScale;
     }
 
+    GlobalBounds globalBounds() {
+        return globalBounds;
+    }
+
     Optimisation.Result getGlobalBoundsResult() {
         return globalBounds.getResult(deadline);
     }
 
-    void addCut(Set<Integer> subset, String name, long minVehicles) {
-        OjAlgoCVRPSolver.addCut(demands.length, globalBounds.getModel(), subset, name, minVehicles);
-        // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
-        globalBounds.clearResult();
-    }
-
     boolean isBestFirst() {
         return queue instanceof PriorityQueue<Node>;
+    }
+
+    BigDecimal[][] getCostMatrix() {
+        return costMatrix;
+    }
+
+    int getMinVehicles() {
+        return minVehicles;
+    }
+
+    boolean isBindingAnywhere(Cut cut) {
+        return queue.stream().anyMatch(n -> n.isBinding(cut));
     }
 }

@@ -1,5 +1,6 @@
 package com.github.vrpjava.cvrp;
 
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
@@ -8,9 +9,11 @@ import java.math.RoundingMode;
 import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
+import static com.github.vrpjava.cvrp.Job.isBinding;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.addCuts;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
@@ -52,7 +55,7 @@ final class Worker {
                     return new AbstractMap.SimpleImmutableEntry<>(i,
                             v.setScale(0, RoundingMode.HALF_EVEN).subtract(v).abs());
                 })
-                .filter(entry -> entry.getValue().signum() > 0);
+                .filter(entry -> entry.getValue().signum() > 0 && nodeModel.getVariable(entry.getKey()).isObjective());
 
         // If we're in best-first mode, we want to branch on the fractional variable as close to 0.5 as possible and
         // with the largest possible coefficient in the objective function.
@@ -75,6 +78,8 @@ final class Worker {
             var v = nodeResult.get(k);
             var closest = v.setScale(0, RoundingMode.HALF_EVEN);
             var other = closest.compareTo(v) > 0 ? closest.subtract(ONE) : closest.add(ONE);
+            var bindingCuts = job.globalBounds().streamCuts().filter(cut -> isBinding(nodeModel, nodeResult, cut))
+                    .collect(Collectors.toSet());
 
             // Queue two child nodes with the decision variable fixed to `closest` and `other`.
             // Also, queue the closest gap last, so it's on top of stack (if it's a LIFO queue.)
@@ -88,8 +93,8 @@ final class Worker {
             //
             // When we're in best-first mode, we sort by the lower bound, rather than the fractional rounding gap; the
             // ordering of these two lines of code does not affect that, but it does affect depth-first mode.
-            job.queueNode(node, nodeBound, k, other);
-            job.queueNode(node, nodeBound, k, closest);
+            job.queueNode(node, nodeBound, k, other, bindingCuts);
+            job.queueNode(node, nodeBound, k, closest, bindingCuts);
         } else {
             job.reportSolution(job.getGlobalBoundsResult(), nodeResult);
         }
@@ -111,11 +116,27 @@ final class Worker {
                                             ExpressionsBasedModel model,
                                             Job job,
                                             long deadline) {
-        var result = minimize(model, deadline);
-        var cuts = new HashSet<Set<Integer>>();
+        return updateBounds(vehicleCapacity, demands, model, job, deadline, new HashSet<>());
+    }
+
+    /**
+     * Static for a reason: sometimes we pass job as null
+     */
+    static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
+                                            BigDecimal[] demands,
+                                            ExpressionsBasedModel model,
+                                            Job job,
+                                            long deadline,
+                                            Set<Cut> cuts) {
+        return updateBounds(vehicleCapacity, demands, model, job, cuts, minimize(model, deadline), deadline);
+    }
+
+    private static Optimisation.Result updateBounds(BigDecimal vehicleCapacity, BigDecimal[] demands,
+                                                    ExpressionsBasedModel model, Job job, Set<Cut> cuts,
+                                                    Optimisation.Result result, long deadline) {
         var size = demands.length;
 
-        for (Set<OjAlgoCVRPSolver.Cut> rccCuts; result.getState().isOptimal() &&
+        for (Set<Cut> rccCuts; result.getState().isOptimal() &&
                 (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
             if (addCuts(rccCuts, cuts, model, result, job, size)) {
                 result = minimize(model, deadline);
@@ -144,13 +165,12 @@ final class Worker {
      */
     private Optimisation.Result weakUpdateBounds(ExpressionsBasedModel model) {
         var result = minimize(model, job.getDeadline());
-        var cuts = new HashSet<Set<Integer>>();
+        var cuts = new HashSet<Cut>();
         var size = job.getDemands().length;
 
         while (result.getState().isOptimal()) {
-            var subtourCuts = SubtourCuts.generate(job.getVehicleCapacity(), job.getDemands(), result);
-
-            if (addCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (addCuts(job.globalBounds().streamCuts(), cuts, model, result, null, size) ||
+                    addCuts(SubtourCuts.stream(job, result), cuts, model, result, job, size)) {
                 result = minimize(model, job.getDeadline());
                 continue;
             }
@@ -159,7 +179,8 @@ final class Worker {
             // if there are no fractional variables, this is a candidate solution, but we don't know for sure until
             // we've validated that it satisfies the full set of constraints, so iterate on additional cuts.
             // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
-            return isInvalidIntegerSolution(result) ? updateBounds(model) : result;
+            return isInvalidIntegerSolution(result) ? updateBounds(job.getVehicleCapacity(), job.getDemands(), model,
+                    job, cuts, result, job.getDeadline()) : result;
         }
 
         return result; // infeasible or timed out.

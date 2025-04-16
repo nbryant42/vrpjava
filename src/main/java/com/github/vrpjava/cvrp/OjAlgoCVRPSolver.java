@@ -15,6 +15,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.github.vrpjava.Util.setTimeout;
 import static com.github.vrpjava.cvrp.CutCandidates.round;
@@ -59,7 +60,11 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     private long bestFirstMillis = 30_000L;
     private CVRPSolver heuristic = new ClarkeWrightCVRPSolver();
 
-    record Cut(int minVehicles, Set<Integer> subset) {
+    record Cut(int minVehicles, String name, Set<Integer> subset) {
+        Cut(int minVehicles, Set<Integer> subset) {
+            this(minVehicles, formatCut(subset), subset);
+        }
+
         Cut(int size, Optimisation.Result result) {
             this(alpha(result), IntStream.range(1, size)
                     .filter(i -> result.get(i).signum() > 0)
@@ -92,16 +97,24 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
     }
 
     static boolean addCuts(Collection<Cut> candidates,
-                           Set<Set<Integer>> cuts,
+                           Set<Cut> cuts,
                            ExpressionsBasedModel model,
                            Optimisation.Result result,
                            Job job,
                            int size) {
-        return candidates.stream().map(cut -> addCut(cuts, model, result, job, cut, size))
+        return addCuts(candidates.stream(), cuts, model, result, job, size);
+    }
+
+    static boolean addCuts(Stream<Cut> candidates, Set<Cut> cuts,
+                           ExpressionsBasedModel model,
+                           Optimisation.Result result,
+                           Job job,
+                           int size) {
+        return candidates.map(cut -> addCut(cuts, model, result, job, cut, size))
                 .reduce(false, (a, b) -> a || b);
     }
 
-    private static boolean addCut(Set<Set<Integer>> cuts,
+    private static boolean addCut(Set<Cut> cuts,
                                   ExpressionsBasedModel model,
                                   Optimisation.Result result,
                                   Job job,
@@ -110,57 +123,56 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         var subset = cut.subset();
         subset.remove(0);
 
-        if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
-            addCut(size, model, job, subset, cut.minVehicles());
+        if (isViolated(result, size, cut) && cuts.add(cut)) {
+            addCut(size, model, job, cut);
             return true;
         }
         return false;
     }
 
     // add a cut to the node-local model, and also propagate it to the global model
-    // if `globalBounds` is not null.
+    // if `job` is not null.
     private static void addCut(int size,
                                ExpressionsBasedModel model,
                                Job job,
-                               Set<Integer> subset,
-                               int minVehicles) {
-        var name = formatCut(subset);
-
-        //debug("Adding " + name + " >= " + min);
-
-        addCut(size, model, subset, name, minVehicles);
+                               Cut cut) {
+        addCut(size, model, cut);
         if (job != null) {
-            job.addCut(subset, name, minVehicles);
+            job.globalBounds().addCut(size, cut);
         }
     }
 
-    static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long minVehicles) {
+    static void addCut(int size, ExpressionsBasedModel model, Cut cut) {
+        var subset = cut.subset();
+        var name = cut.name();
+        var minVehicles = cut.minVehicles();
+
         if (subset.size() <= size * (size + 1) / (2 * size - 2)) {
             // Use constraint form (1.3)
 
-            var cut = model.newExpression(name).upper(subset.size() - minVehicles);
+            var expr = model.newExpression(name).upper(subset.size() - minVehicles);
 
             for (var row : subset) {
                 for (var col : subset) {
                     if (col < row) {
-                        cut.set(getVariable_noFlip(row, col, model), ONE);
+                        expr.set(getVariable_noFlip(row, col, model), ONE);
                     }
                 }
             }
         } else {
             // Use constraint form (4.1)
 
-            var cut = model.newExpression(name).upper(size - 1 - subset.size() - minVehicles);
+            var expr = model.newExpression(name).upper(size - 1 - subset.size() - minVehicles);
 
             for (var row = 1; row < size; row++) {
                 if (subset.contains(row)) {
-                    cut.set(getVariable_noFlip(row, 0, model), MINUS_HALF);
+                    expr.set(getVariable_noFlip(row, 0, model), MINUS_HALF);
                 } else {
-                    cut.set(getVariable_noFlip(row, 0, model), HALF);
+                    expr.set(getVariable_noFlip(row, 0, model), HALF);
 
                     for (var col = 1; col < row; col++) {
                         if (!subset.contains(col)) {
-                            cut.set(getVariable_noFlip(row, col, model), ONE);
+                            expr.set(getVariable_noFlip(row, col, model), ONE);
                         }
                     }
                 }
@@ -168,11 +180,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver {
         }
     }
 
-    static boolean isViolated(Optimisation.Result result,
-                              int size,
-                              Set<Integer> subset,
-                              int minVehicles) {
-        var min = minVehicles * 2L;
+    static boolean isViolated(Optimisation.Result result, int size, Cut cut) {
+        Set<Integer> subset = cut.subset();
+        var min = cut.minVehicles() * 2L;
         var total = ZERO;
 
         for (var target : subset) {

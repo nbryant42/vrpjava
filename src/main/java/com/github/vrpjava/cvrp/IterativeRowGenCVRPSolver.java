@@ -1,5 +1,6 @@
 package com.github.vrpjava.cvrp;
 
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.netio.BasicLogger;
 
 import java.math.BigDecimal;
@@ -44,7 +45,7 @@ class IterativeRowGenCVRPSolver extends CVRPSolver {
         var deadline = start + timeout;
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
-        var cuts = new HashSet<Set<Integer>>();
+        var cuts = new HashSet<Cut>();
 
         buildConstraints(model, minVehicles, vars);
 

@@ -8,8 +8,8 @@ import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.Set;
 
-import static java.lang.Math.min;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.isViolated;
+import static java.lang.Math.min;
 
 class CutCandidates {
     private final int size;
@@ -22,7 +22,7 @@ class CutCandidates {
     }
 
     void take(Optimisation.Result result, Cut cut) {
-        if (!isViolated(parentResult, size, cut.subset(), cut.minVehicles())) {
+        if (!isViolated(parentResult, size, cut)) {
             return;
         }
         var objective = round(BigDecimal.valueOf(result.getValue()));
