@@ -16,6 +16,7 @@ import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
+import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.HEURISTIC;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
 import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
@@ -342,6 +343,125 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
         return result;
     }
+
+    // This case has been solved to optimality by others, but Lysgaard et al. had to run their code for about 33 hours.
+    @Test
+    @Disabled
+    void eilD76() throws IOException {
+        var timeout = 300_000L;
+
+        try (var solver = newSolver()) {
+            var result = doTestEilD76(solver, timeout, 220);
+
+            assertEquals(HEURISTIC, result.state());
+            assertEquals(730.0, result.objective());
+        }
+    }
+
+    // I think this is probably the same as the P-n76-k4 from Lysgaard et al.
+    @Test
+    @Disabled
+    void eilD76_k4() throws IOException {
+        var timeout = 1800_000L;
+
+        try (var solver = newSolver()) {
+            var result = doTestEilD76(solver, timeout, 360);
+
+            //assertEquals(OPTIMAL, result.state());
+            assertEquals(593.0, result.objective());
+        }
+    }
+
+
+    Result doTestEilD76(CVRPSolver solver, long timeout, int capacity) throws IOException {
+        var vrp = TsplibArchive.loadVrpInstance("eilD76.vrp");
+        var dim = vrp.dimension();
+
+        System.out.println(vrp);
+
+        // total demand 1364
+        var demands = IntStream.of(0, 18, 26, 11, 30, 21, 19, 15, 16, 29, 26, 37, 16, 12, 31, 8, 19, 20,
+                        13, 15, 22, 28, 12, 6, 27, 14, 18, 17, 29, 13, 22, 25, 28, 27, 19, 10, 12, 14, 24, 16,
+                        33, 15, 11, 18, 17, 21, 27, 19, 20, 5, 22, 12, 19, 22, 16, 7, 26, 14, 21, 24, 13, 15, 18,
+                        11, 28, 9, 37, 30, 10, 8, 11, 3, 1, 6, 10, 20)
+                .limit(dim)
+                .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
+
+        var costs = buildCosts(true, dim, vrp);
+        var minVehicles = 1;
+        var start = System.currentTimeMillis();
+        var result = solver.solve(minVehicles, BigDecimal.valueOf(capacity), demands, costs, timeout);
+
+        System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
+
+        return result;
+    }
+
+    // has been solved by others, but it's very hard.
+    @Test
+    @Disabled
+    void eilA101_k8() throws IOException {
+        var timeout = 300_000L;
+
+        try (var solver = newSolver()) {
+            var result = doTestEilA101(solver, timeout, 200);
+
+            assertEquals(OPTIMAL, result.state());
+            assertEquals(521.0, result.objective());
+        }
+    }
+
+    // This one's interesting. I think it's probably the same "P-n101-k4" used by Lysgaard et al.
+    // Our time to bound the root node is competitive with theirs, but we search a lot more nodes to find the optimum.
+    // Example log:
+    // [87.473s]: Switching to best-first search. Bounds now 673.425729429/758.0 (88.84%); 118 cuts, 0 nodes. Next node has bound null
+    // [211.168s]: New solution. Bounds now 675.825/685.0 (98.66%); 209 cuts, 2502 nodes. Next node has bound 681.0
+    // [213.111s]: New solution. Bounds now 675.825/682.0 (99.09%); 210 cuts, 2534 nodes. Next node has bound 681.0
+    // [308.909s]: New solution. Bounds now 675.825/681.0 (99.24%); 220 cuts, 3989 nodes. Next node has bound 681.0
+    // 6045 nodes, 4 cycles: [[0, 27, 69, 1, 50, 33, 81, 9, 51, 30, 70, 10, 62, 11, 19, 48, 82, 7, 88, 31, 52], [0, 28, 76, 77, 3, 79, 78, 34, 35, 71, 65, 66, 20, 32, 90, 63, 64, 49, 36, 47, 46, 8, 45, 17, 84, 5, 60, 83, 18, 89], [0, 13, 58, 40, 21, 73, 72, 74, 22, 41, 75, 56, 23, 67, 39, 4, 25, 55, 54, 24, 29, 68, 80, 12, 26, 53], [0, 6, 96, 99, 59, 92, 93, 98, 37, 100, 91, 85, 61, 16, 86, 44, 38, 14, 42, 43, 15, 57, 2, 87, 97, 95, 94]]
+    // Cycle demands: [300, 382, 384, 392]
+    // Currently 220 cuts.
+    // Total elapsed: 308915 ms
+    @Test
+    @Disabled
+    void eilA101_k4() throws IOException {
+        var timeout = 900_000L;
+
+        try (var solver = newSolver()) {
+            solver.setBestFirstMillis(timeout);
+            var result = doTestEilA101(solver, timeout, 400);
+
+            assertEquals(OPTIMAL, result.state());
+            assertEquals(681.0, result.objective());
+        }
+    }
+
+    Result doTestEilA101(CVRPSolver solver, long timeout, int capacity) throws IOException {
+        var vrp = TsplibArchive.loadVrpInstance("eilA101.vrp");
+        var dim = vrp.dimension();
+
+        System.out.println(vrp);
+
+        // total demand 1458
+
+        var demands = IntStream.of(0, 10, 7, 13, 19, 26, 3, 5, 9, 16, 16, 12, 19, 23, 20, 8, 19, 2, 12, 17, 9,
+                        11, 18, 29, 3, 6, 17, 16, 16, 9, 21, 27, 23, 11, 14, 8, 5, 8, 16, 31, 9, 5, 5, 7, 18, 16, 1, 27,
+                        36, 30, 13, 10, 9, 14, 18, 2, 6, 7, 18, 28, 3, 13, 19, 10, 9, 20, 25, 25, 36, 6, 5, 15, 25, 9,
+                        8, 18, 13, 14, 3, 23, 6, 26, 16, 11, 7, 41, 35, 26, 9, 15, 3, 1, 2, 22, 27, 20, 11, 12, 10, 9,
+                        17)
+                .limit(dim)
+                .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
+
+        var costs = buildCosts(true, dim, vrp);
+        var minVehicles = 1;
+        var start = System.currentTimeMillis();
+        var result = solver.solve(minVehicles, BigDecimal.valueOf(capacity), demands, costs, timeout);
+
+        System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
+
+        return result;
+    }
+
 
     // get non-rounded weights, to more closely match the way this is handled in eil33-2 from MIPLIB.
     static double getEdgeWeightNonRounded(int i, int j, double[][] nodeCoords) {

@@ -51,6 +51,7 @@ class Job {
     private volatile Queue<Node> queue;
     private Result.State state;
     private Optimisation.Result incumbent;
+    @GuardedBy("this")
     private int nodes;
     private final AtomicLong totalTime = new AtomicLong();
     private final AtomicInteger nodesInFlight = new AtomicInteger();
