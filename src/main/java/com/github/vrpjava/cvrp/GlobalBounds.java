@@ -18,7 +18,7 @@ final class GlobalBounds {
         return model;
     }
 
-    Optimisation.Result getResult(long deadline) {
+    synchronized Optimisation.Result getResult(long deadline) {
         if (result == null) {
             // TODO although the global lower bound CAN change during a run, it seems rare. Maybe drop this
             // re-solve and just hold it constant?

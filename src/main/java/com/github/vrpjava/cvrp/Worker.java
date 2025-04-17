@@ -11,7 +11,6 @@ import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.addCuts;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
@@ -23,13 +22,13 @@ import static java.util.Map.Entry.comparingByValue;
  * Multithreading is not implemented yet, but when it is, this class will contain all the worker-thread logic.
  */
 final class Worker {
-    private final Job job;
+    private final Scheduler scheduler;
 
-    public Worker(Job job) {
-        this.job = job;
+    Worker(Scheduler scheduler) {
+        this.scheduler = scheduler;
     }
 
-    void process(Node node) {
+    void process(Job job, Node node) {
         // double-check the parent node's bound before we go any further; the best-known solution may have
         // improved since it was queued.
         if (node.bound() >= job.getBestKnown()) {
@@ -38,8 +37,8 @@ final class Worker {
         var nodeModel = job.copyGlobalBoundsModel();
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
-        var nodeResult = weakUpdateBounds(nodeModel);
-        var nodeBound = roundBound(nodeResult.getValue());
+        var nodeResult = weakUpdateBounds(job, nodeModel);
+        var nodeBound = roundBound(job, nodeResult.getValue());
 
         // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
         if (!nodeResult.getState().isOptimal() || nodeBound >= job.getBestKnown()) {
@@ -87,11 +86,10 @@ final class Worker {
             // especially in the LP relaxation.)
             //
             // When we're in best-first mode, we sort by the lower bound, rather than the fractional rounding gap; the
-            // ordering of these two lines of code does not affect that, but it does affect depth-first mode.
-            job.queueNode(node, nodeBound, k, other);
-            job.queueNode(node, nodeBound, k, closest);
+            // ordering of these two nodes does not affect that, but it does affect depth-first mode.
+            scheduler.queueNodes(job, new Node(node, nodeBound, k, other), new Node(node, nodeBound, k, closest));
         } else {
-            job.reportSolution(job.getGlobalBoundsResult(), nodeResult);
+            job.reportSolution(nodeResult);
         }
     }
 
@@ -99,7 +97,7 @@ final class Worker {
      * If all costs are integer, the bound can be tightened by rounding up to the nearest integer.
      * (We generalize this to any level of precision.)
      */
-    private double roundBound(double lb) {
+    private static double roundBound(Job job, double lb) {
         return BigDecimal.valueOf(lb).setScale(job.maxScale(), RoundingMode.CEILING).doubleValue();
     }
 
@@ -117,13 +115,13 @@ final class Worker {
 
         for (Set<OjAlgoCVRPSolver.Cut> rccCuts; result.getState().isOptimal() &&
                 (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
-            if (addCuts(rccCuts, cuts, model, result, job, size)) {
+            if (Job.addCuts(rccCuts, cuts, model, result, job, size)) {
                 result = minimize(model, deadline);
                 continue;
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (addCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (Job.addCuts(subtourCuts, cuts, model, result, job, size)) {
                 result = minimize(model, deadline);
                 continue;
             }
@@ -142,7 +140,7 @@ final class Worker {
      * but does not solve the RCC-Sep model unless absolutely necessary.
      * (we need to check validity. when the node solution is integer)
      */
-    private Optimisation.Result weakUpdateBounds(ExpressionsBasedModel model) {
+    private static Optimisation.Result weakUpdateBounds(Job job, ExpressionsBasedModel model) {
         var result = minimize(model, job.getDeadline());
         var cuts = new HashSet<Set<Integer>>();
         var size = job.getDemands().length;
@@ -150,7 +148,7 @@ final class Worker {
         while (result.getState().isOptimal()) {
             var subtourCuts = SubtourCuts.generate(job.getVehicleCapacity(), job.getDemands(), result);
 
-            if (addCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (Job.addCuts(subtourCuts, cuts, model, result, job, size)) {
                 result = minimize(model, job.getDeadline());
                 continue;
             }
@@ -159,11 +157,11 @@ final class Worker {
             // If there are no fractional variables, this is a candidate solution, but we don't know for sure until
             // we've validated that it satisfies the full set of constraints, so iterate on additional cuts.
             // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
-            if (isInvalidIntegerSolution(result)) {
+            if (isInvalidIntegerSolution(job, result)) {
                 var rccCuts = RccSepCVRPCuts.generate(job.getVehicleCapacity(), job.getDemands(), result,
                         job.getDeadline());
 
-                if (rccCuts != null && addCuts(rccCuts, cuts, model, result, job, size)) {
+                if (rccCuts != null && Job.addCuts(rccCuts, cuts, model, result, job, size)) {
                     result = minimize(model, job.getDeadline());
                     continue;
                 }
@@ -175,7 +173,7 @@ final class Worker {
     }
 
     // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.
-    private boolean isInvalidIntegerSolution(Optimisation.Result result) {
+    private static boolean isInvalidIntegerSolution(Job job, Optimisation.Result result) {
         return isIntegerSolution(result) && findCycles(job.getDemands().length, result).stream().anyMatch(cycle ->
                 cycle.stream().map(i -> job.getDemands()[i])
                         .reduce(ZERO, BigDecimal::add)

@@ -20,9 +20,9 @@ available [integrations](https://www.ojalgo.org/ojalgo-extensions/).
 This code is early and I can't guarantee a stable API yet. But it has proven capable enough to solve,
 to optimality, some medium-size problems; my main test-case has been the EIL33 case discussed at
 https://github.com/IBMDecisionOptimization/Decision-Optimization-with-CPLEX-samples/blob/master/Vehicle-routing.pdf.
-This problem has 32 customers and the optimal solution requires 4 vehicles. On my old Ryzen 3900X, the code
-would typically solve it to optimality in about 20-40 seconds; or as little as ~8 seconds on my new i7-14700KF.
-(Runtime is a bit unpredictable due to multiple equivalent LP relaxations that define different starting points.)
+This problem has 32 customers and the optimal solution requires 4 vehicles. Now that the code is fully multithreaded,
+this solves in about 2 seconds on a Core i7-14700K. EIL51 solves in about 20 seconds. Most of the runtime is in the
+initial cut-generation phase at the root node, which cannot be parallelized at a high level.
 
 See the Javadoc for more details; start with the `OjAlgoCVRPSolver` class.
 
@@ -32,7 +32,7 @@ There are a few potential areas for improvement:
   outbound edges. See [Lysgaard et al.](https://www.lancaster.ac.uk/staff/letchfoa/articles/2004-cvrp-exact.pdf)
   and [Augerat et al.](https://www.osti.gov/etdeweb/servlets/purl/289002.)
 * Those papers also describe a few classes of cutting planes that should improve our bounds.
-* Multithreading. Right now this code doesn't come close to fully utilizing all CPU cores.
+* Tackling some of the very hard problem instances may require some sort of cut-pool management.
 
 But what this code needs most, right now, is another pair of eyes.
 
@@ -53,13 +53,24 @@ Look under Project Reports.
 
 ## Search algorithm
 
-The algorithm starts out with a depth-first branch-and-cut search. When the current best-known-solution is close enough
-to the lower bound, it switches to a best-first search by changing the node stack to a priority queue on the fly. But
-best-first will not work for some of the harder problem instances (such as EIL33 modified with a vehicle capacity of
-4000), so there are two configurable thresholds to limit whether and when this switch happens.
+The algorithm first iterates on the RCC-Sep procedure (which is itself NP-hard) until it's no longer possible to
+generate additional cuts. Then it proceeds with a parallel, best-first branch-and-cut search, but the strategy for the
+non-root nodes is different from the root node; here, it mostly avoids the RCC-Sep procedure, only using the RCC-Sep
+procedure when we have an integer solution that is known to violate one or more capacity constraints.
+
+There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the
+hardest problem instances, we may not be able to solve to optimality, so the goal would be to merely generate an
+improved feasible solution more quickly. This works as an attempt to guess the best strategy based on the problem at
+hand, so in this case, the algorithm starts out with a depth-first branch-and-cut search. When the current
+best-known-solution is close enough to the lower bound, it switches to a best-first search by changing the node stack to
+a priority queue on the fly. There are two configurable thresholds to limit whether and when this switch happens.
 
 See the methods `OjAlgoCVRPSolver.setBestFirstMillis()` and `OjAlgoCVRPSolver.setBestFirstRatio()`
-for those tunables.
+for those parameters.
+
+(This auto-detection logic doesn't work very well, so the default settings are currently biased towards best-first
+search. The problem is that the Clarke-Wright heuristic is actually pretty good, so even for some of the hard problems
+we now start out with a higher bounds ratio.)
 
 ## Why an exact solver, and not heuristic?
 

@@ -48,16 +48,17 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     void eil33() throws IOException {
         // old heuristic 835.2278/1043.1736 (80.07%)
         // new heuristic 835.2278/843.0978 (99.07%)
-        var solver = newSolver();
-        var timeout = 300_000L;
-        solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
+        try (var solver = newSolver()) {
+            var timeout = 300_000L;
+            solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
 
-        assertEquals(new Result(OPTIMAL, 837.67155201, Set.of(
-                        List.of(0, 1, 15, 26, 27, 16, 28, 29),
-                        List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
-                        List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
-                        List.of(0, 30, 14, 31))),
-                doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+            assertEquals(new Result(OPTIMAL, 837.67155201, Set.of(
+                            List.of(0, 1, 15, 26, 27, 16, 28, 29),
+                            List.of(0, 2, 12, 11, 32, 8, 9, 7, 4),
+                            List.of(0, 3, 5, 6, 10, 18, 19, 21, 20, 22, 23, 24, 25, 17, 13),
+                            List.of(0, 30, 14, 31))),
+                    doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+        }
     }
 
     /**
@@ -72,14 +73,15 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
      */
     @Test
     void eil33_rounded() throws IOException {
-        var solver = newSolver();
-        var timeout = 300_000L;
-        solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
+        try (var solver = newSolver()) {
+            var timeout = 300_000L;
+            solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
 
-        var actual = (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver, true);
+            var actual = (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver, true);
 
-        assertEquals(OPTIMAL, actual.state());
-        assertEquals(835.0, actual.objective());
+            assertEquals(OPTIMAL, actual.state());
+            assertEquals(835.0, actual.objective());
+        }
     }
 
     protected OjAlgoCVRPSolver newSolver() {
@@ -130,11 +132,23 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @Test
     @Disabled
     void eil33_moreVehicles_rounded() throws IOException {
-        var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 3_600_000L, 4000, newSolver(), true);
+        try (var solver = newSolver()) {
+            var r = (Result) doTestEil33(Integer.MAX_VALUE, false, 3_600_000L, 4000, solver, true);
+            // Best so far:
+            // [9.239s]: Switching to best-first search. Bounds now 1427.166666634/1531.0 (93.22%); 203 cuts, 0 nodes.
+            // [219.190s]: New solution. Bounds now 1427.166666634/1455.0 (98.09%); 652 cuts, 7320 nodes.
+            // [356.903s]: New solution. Bounds now 1427.166666624/1454.0 (98.15%); 709 cuts, 10502 nodes.
+            // [1310.753s]: New solution. Bounds now 1427.166666634/1451.0 (98.36%); 1029 cuts, 19445 nodes.
+            // [1314.813s]: New solution. Bounds now 1427.166666634/1450.0 (98.43%); 1032 cuts, 19463 nodes.
+            // 29280 nodes, 8 cycles: [[0, 12, 21, 20, 23, 24, 25], [0, 2, 11, 32, 8, 6], [0, 15, 17, 27, 16, 28, 29], [0, 5, 9, 10, 18, 19, 22, 13], [0, 26], [0, 1, 14, 31], [0, 3, 7, 4], [0, 30]]
+            // Cycle demands: [3700, 3980, 3800, 3790, 4000, 4000, 3600, 2500]
+            // Currently 1197 cuts.
+            // Total elapsed: 3600026 ms
 
-        double v = 1531.0;
-        if (r.objective() > v) {
-            fail("Objective > " + v);
+            double v = 1531.0;
+            if (r.objective() > v) {
+                fail("Objective > " + v);
+            }
         }
     }
 
@@ -170,10 +184,11 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
     @Test
     void timeoutInNode() throws IOException {
-        var solver = newSolver();
-        solver.setBestFirstMillis(0L); // deliberately slow this down
-        Result result = (Result) doTestEil33(Integer.MAX_VALUE, false, 25_000L, 8000, solver);
-        assertTrue(result.state().isFeasible());
+        try (var solver = newSolver()) {
+            solver.setBestFirstMillis(0L); // deliberately slow this down
+            var result = (Result) doTestEil33(Integer.MAX_VALUE, false, 25_000L, 8000, solver);
+            assertTrue(result.state().isFeasible());
+        }
     }
 
     // 240-254ms w/ naive code; now ~550-800 ms
@@ -233,7 +248,9 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
     private Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity)
             throws IOException {
-        return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, newSolver());
+        try (var solver = newSolver()) {
+            return doTestEil33(limit, boundsOnly, timeoutMillis, vehicleCapacity, solver);
+        }
     }
 
     private static Object doTestEil33(int limit, boolean boundsOnly, long timeoutMillis, int vehicleCapacity,
@@ -289,12 +306,17 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         return costs;
     }
 
-    //solves to optimality, but rather slowly (~35-60s)
     @Test
     @Disabled
     void eil51() throws IOException {
         var timeout = 300_000L;
-        assertTrue(582.0 >= doTestEil51(newSolver(), timeout).objective());
+
+        try (var solver = newSolver()) {
+            var result = doTestEil51(solver, timeout);
+
+            assertEquals(OPTIMAL, result.state());
+            assertEquals(521.0, result.objective());
+        }
     }
 
 
@@ -304,9 +326,9 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
         System.out.println(vrp);
 
-        var demands = IntStream.of(0, 7, 30, 16, 9, 21, 15, 19, 23, 11, 5, 19, 29, 23, 21, 10, 15, 3, 41, 9, 28, 8, 8,
-                        16, 10, 28, 7, 15, 14, 6, 19, 11, 12, 23, 26, 17, 6, 9, 15, 14, 7, 27, 13, 11, 16, 10, 5, 25,
-                        17, 18, 10)
+        var demands = IntStream.of(0, 7, 30, 16, 9, 21, 15, 19, 23, 11, 5, 19, 29, 23, 21, 10, 15, 3, 41, 9, 28,
+                        8, 8, 16, 10, 28, 7, 15, 14, 6, 19, 11, 12, 23, 26, 17, 6, 9, 15, 14, 7, 27, 13, 11, 16, 10, 5,
+                        25, 17, 18, 10)
                 .limit(dim)
                 .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
 

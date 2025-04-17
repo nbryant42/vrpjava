@@ -1,18 +1,22 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.cvrp.CVRPSolver.Result;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.vrpjava.Util.newModel;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildConstraints;
@@ -26,27 +30,33 @@ import static java.math.BigDecimal.ZERO;
 import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
 /**
- * Multithreading is not implemented yet, but when it is, this class will represent a single processing job that we
- * register with a thread scheduler, and function as the coordination point for worker threads.
+ * Represents a single processing job that we register with a thread scheduler,
+ * and functions as the coordination point for worker threads.
  */
 class Job {
     private final OjAlgoCVRPSolver solver;
     private final BigDecimal vehicleCapacity;
     private final BigDecimal[] demands;
     private final long start;
-    private final long deadline;
+    private final long deadline; // TODO replace usages with nanoTime
     private final Result kickstarter;
+    @GuardedBy("globalBounds")
     private final GlobalBounds globalBounds;
     private final int maxScale;
+    @GuardedBy("this")
     private boolean done;
-    private double bestKnown;
-    private Queue<Node> queue;
+    private volatile double bestKnown;
+
+    @GuardedBy("this")
+    private volatile Queue<Node> queue;
     private Result.State state;
     private Optimisation.Result incumbent;
     private int nodes;
+    private final AtomicLong totalTime = new AtomicLong();
+    private final AtomicInteger nodesInFlight = new AtomicInteger();
 
-    public Job(OjAlgoCVRPSolver solver, int minVehicles, BigDecimal vehicleCapacity,
-               BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
+    Job(OjAlgoCVRPSolver solver, int minVehicles, BigDecimal vehicleCapacity,
+        BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
         this.start = System.currentTimeMillis();
         this.solver = solver;
         this.vehicleCapacity = vehicleCapacity;
@@ -84,13 +94,15 @@ class Job {
     }
 
     Result run() {
+        var globalBoundsResult = globalBounds.getResult(deadline);
+
         if (kickstarter.state() != Result.State.HEURISTIC) {
             // This theoretically can't happen now that I've removed the ill-considered `maxVehicles` parameter, but
             // let's check the status just to be thorough:
             bestKnown = POSITIVE_INFINITY;
 
-            if (!globalBounds.getResult(deadline).getState().isOptimal()) {
-                var myState = globalBounds.getResult(deadline).getState() == INFEASIBLE ? Result.State.INFEASIBLE :
+            if (!globalBoundsResult.getState().isOptimal()) {
+                var myState = globalBoundsResult.getState() == INFEASIBLE ? Result.State.INFEASIBLE :
                         Result.State.UNEXPLORED;
 
                 return buildResult(myState, null, 0);
@@ -98,7 +110,7 @@ class Job {
         } else {
             bestKnown = kickstarter.objective();
 
-            if (!globalBounds.getResult(deadline).getState().isOptimal()) {
+            if (!globalBoundsResult.getState().isOptimal()) {
                 return buildResult(Result.State.HEURISTIC, null, 0);
             }
         }
@@ -109,45 +121,61 @@ class Job {
         // search. Depth-first search finds many valid solutions more quickly, whereas best-first search is more likely
         // to proceed directly to the better solutions, but will explore more internal nodes before it gets there. We
         // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
-        queue = evaluateStrategy(globalBounds.getResult(deadline).getValue(), bestKnown, start,
-                Collections.asLifoQueue(new ArrayDeque<>()), "Initial");
-        var worker = new Worker(this);
+        queue = Collections.asLifoQueue(new ArrayDeque<>());
+        solver.debug(evaluateStrategy(globalBoundsResult.getValue(), bestKnown, start, "Initial"));
         state = kickstarter.state();
 
         // the root node has no variables fixed.
-        queue.add(new Node(0, globalBounds.getResult(deadline).getValue(), Map.of()));
+        queue.add(new Node(0, globalBoundsResult.getValue(), Map.of()));
+        solver.register(this);
 
-        for (; !done && deadline > System.currentTimeMillis(); nodes++) {
-            var node = queue.poll();
-
-            if (node == null) {
-                if (state == Result.State.FEASIBLE) {
-                    state = Result.State.OPTIMAL;
+        synchronized (this) {
+            while (!done && deadline > System.currentTimeMillis()) {
+                var remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
                 }
-                done = true;
-            } else {
-                worker.process(node);
+                try {
+                    wait(remaining);
+                } catch (InterruptedException ignored) {
+                }
             }
         }
 
+        solver.deregister(this);
         return buildResult(state, incumbent, nodes);
     }
 
-    void reportSolution(Optimisation.Result globalBoundsResult, Optimisation.Result nodeResult) {
+    void reportSolution(Optimisation.Result nodeResult) {
+        var globalBoundsResult = globalBounds.getResult(deadline);
         var lb = globalBoundsResult.getValue();
         var ub = nodeResult.getValue();
-        queue = evaluateStrategy(lb, ub, start, queue, "New");
+        String msg = null;
 
-        incumbent = nodeResult;
-        bestKnown = ub;
-        state = Result.State.FEASIBLE;
+        synchronized (this) {
+            if (ub < bestKnown) {
+                msg = evaluateStrategy(lb, ub, start, "New");
+                incumbent = nodeResult;
+                bestKnown = ub;
+                state = Result.State.FEASIBLE;
 
-        if (ub <= lb) {
-            state = Result.State.OPTIMAL;
-            done = true;
-        } else if (!globalBoundsResult.getState().isOptimal()) {
-            done = true;
+                if (ub <= lb) {
+                    state = Result.State.OPTIMAL;
+                    setDone();
+                } else if (!globalBoundsResult.getState().isOptimal()) {
+                    setDone();
+                }
+            }
         }
+
+        if (msg != null) {
+            solver.debug(msg);
+        }
+    }
+
+    private void setDone() {
+        done = true;
+        notifyAll();
     }
 
     private Result buildResult(Result.State myState, Optimisation.Result incumbent, int nodes) {
@@ -164,38 +192,39 @@ class Job {
     }
 
     private long countCuts() {
-        return globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
+        synchronized (globalBounds) {
+            return globalBounds.getModel().getExpressions().stream().filter(e -> e.getName().contains("cut:")).count();
+        }
     }
 
-    void queueNode(Node parent, double nodeBound, Integer k, BigDecimal v) {
-        var childVars = new HashMap<>(parent.vars());
-        childVars.put(k, v);
-        queue.add(new Node(parent.depth() + 1, nodeBound, childVars));
+    synchronized void queueNode(Node node) {
+        queue.add(node);
     }
 
     /**
-     * Possibly update the search strategy from depth-first to best-first.
-     *
-     * @return either an updated queue (if changing the strategy) or the existing queue unmodified
+     * Possibly update the search strategy from depth-first to best-first,
+     * by changing the queue to a {@link PriorityQueue}
      */
-    private Queue<Node> evaluateStrategy(double lb, double ub, long start, Queue<Node> queue, String descriptor) {
+    private String evaluateStrategy(double lb, double ub, long start, String descriptor) {
         var ratio = lb / ub;
         var elapsed = System.currentTimeMillis() - start;
+        var peek = queue.peek();
         var suffix = lb + "/" + ub + " (" + BigDecimal.valueOf(ratio * 100.0).setScale(2, RoundingMode.HALF_EVEN) +
-                "%); " + countCuts() + " cuts, " + nodes + " nodes.";
+                "%); " + countCuts() + " cuts, " + nodes + " nodes. Next node has bound " +
+                (peek == null ? null : peek.bound());
 
-        if (!(queue instanceof PriorityQueue<Node>) && ratio > solver.getBestFirstRatio() &&
-                elapsed < solver.getBestFirstMillis()) {
+        synchronized (this) {
+            if (queue instanceof PriorityQueue<Node> || ratio <= solver.getBestFirstRatio() ||
+                    elapsed >= solver.getBestFirstMillis()) {
+                return "[" + toSeconds(elapsed) + "s]: " + descriptor + " solution. Bounds now " + suffix;
+            }
             // Found a feasible solution, and bounds are tight enough that best-first search may help.
             // Switch to best-first search.
             // Also, if it's taken us more than X amount of time to get here, then we're working a
             // hard problem, and it's not a good idea to switch.
             queue = new PriorityQueue<>(queue);
-            solver.debug("[" + toSeconds(elapsed) + "s]: Switching to best-first search. Bounds now " + suffix);
-        } else {
-            solver.debug("[" + toSeconds(elapsed) + "s]: " + descriptor + " solution. Bounds now " + suffix);
+            return "[" + toSeconds(elapsed) + "s]: Switching to best-first search. Bounds now " + suffix;
         }
-        return queue;
     }
 
     double getBestKnown() {
@@ -203,7 +232,9 @@ class Job {
     }
 
     ExpressionsBasedModel copyGlobalBoundsModel() {
-        return globalBounds.getModel().copy(true, false);
+        synchronized (globalBounds) {
+            return globalBounds.getModel().copy();
+        }
     }
 
     BigDecimal getVehicleCapacity() {
@@ -222,8 +253,14 @@ class Job {
         return maxScale;
     }
 
-    Optimisation.Result getGlobalBoundsResult() {
-        return globalBounds.getResult(deadline);
+    static boolean addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
+                           Optimisation.Result result, Job job, int size) {
+        if (job == null) {
+            return OjAlgoCVRPSolver.addCuts(rccCuts, cuts, model, result, null, size);
+        }
+        synchronized (job.globalBounds) {
+            return OjAlgoCVRPSolver.addCuts(rccCuts, cuts, model, result, job, size);
+        }
     }
 
     void addCut(Set<Integer> subset, String name, long minVehicles) {
@@ -234,5 +271,42 @@ class Job {
 
     boolean isBestFirst() {
         return queue instanceof PriorityQueue<Node>;
+    }
+
+    synchronized boolean hasWork() {
+        return !queue.isEmpty();
+    }
+
+    synchronized Node nextNode() {
+        nodesInFlight.getAndIncrement();
+        nodes++;
+        return queue.remove();
+    }
+
+    long totalTime() {
+        return totalTime.get();
+    }
+
+    void resetTime() {
+        this.totalTime.set(0);
+    }
+
+    /**
+     * Called after each node is processed to record the runtime, for scheduling fairness purposes.
+     * <p>
+     * Also decrements an internal counter of nodes in flight, and if the queue is empty, handles the completion logic.
+     */
+    void nodeComplete(long elapsedTime) {
+        totalTime.getAndAdd(elapsedTime);
+        if (nodesInFlight.decrementAndGet() <= 0) {
+            synchronized (this) {
+                if (queue.isEmpty()) {
+                    if (state == Result.State.FEASIBLE) {
+                        state = Result.State.OPTIMAL;
+                    }
+                    setDone();
+                }
+            }
+        }
     }
 }
