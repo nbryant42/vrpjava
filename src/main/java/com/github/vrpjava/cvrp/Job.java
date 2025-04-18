@@ -100,12 +100,12 @@ class Job {
         return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
     }
 
-    private static boolean addCuts(Collection<Cut> candidates,
-                                   Set<Set<Integer>> cuts,
-                                   ExpressionsBasedModel model,
-                                   Optimisation.Result result,
-                                   Job job,
-                                   int size) {
+    private static int doAddCuts(Collection<Cut> candidates,
+                                 Set<Set<Integer>> cuts,
+                                 ExpressionsBasedModel model,
+                                 Optimisation.Result result,
+                                 Job job,
+                                 int size) {
         return candidates.stream().map(cut -> {
                     var subset = cut.subset();
                     subset.remove(0);
@@ -116,15 +116,15 @@ class Job {
 
                         addCut(size, model, subset, name, minVehicles);
                         if (job != null) {
-                            addCut(job.demands.length, job.globalBounds.getModel(), subset, name, minVehicles);
-                            // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
+                            addCut(size, job.globalBounds.getModel(), subset, name, minVehicles);
+                            // don't calculate the result here, only lazily when needed
                             job.globalBounds.clearResult();
                         }
-                        return true;
+                        return 1;
                     }
-                    return false;
+                    return 0;
                 })
-                .reduce(false, (a, b) -> a || b);
+                .reduce(0, Integer::sum);
     }
 
     static boolean isViolated(Optimisation.Result result,
@@ -326,15 +326,15 @@ class Job {
         }
     }
 
-    BigDecimal getVehicleCapacity() {
+    BigDecimal vehicleCapacity() {
         return vehicleCapacity;
     }
 
-    BigDecimal[] getDemands() {
+    BigDecimal[] demands() {
         return demands;
     }
 
-    long getDeadline() {
+    long deadline() {
         return deadline;
     }
 
@@ -346,16 +346,16 @@ class Job {
      * If we're also propagating cuts to the global model (<code>job</code> is not null), then we need to acquire the
      * <code>globalBounds</code> lock first. This method decides whether that's necessary.
      */
-    static boolean lockingAddCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
-                                  Optimisation.Result result, Job job, int size) {
-        return job == null ? addCuts(rccCuts, cuts, model, result, null, size) :
-                job.addCuts(rccCuts, cuts, model, result, size);
+    static int addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
+                       Optimisation.Result result, Job job, int size) {
+        return job == null ? doAddCuts(rccCuts, cuts, model, result, null, size) :
+                job.addCuts(rccCuts, cuts, model, result);
     }
 
-    boolean addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
-                    Optimisation.Result result, int size) {
+    int addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
+                Optimisation.Result result) {
         synchronized (globalBounds) {
-            return addCuts(rccCuts, cuts, model, result, this, size);
+            return doAddCuts(rccCuts, cuts, model, result, this, demands.length);
         }
     }
 

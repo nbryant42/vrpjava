@@ -1,9 +1,11 @@
 package com.github.vrpjava.cvrp;
 
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.AbstractMap;
 import java.util.HashSet;
@@ -11,7 +13,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static com.github.vrpjava.cvrp.Job.lockingAddCuts;
+import static com.github.vrpjava.cvrp.Job.addCuts;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
@@ -23,6 +25,7 @@ import static java.util.Map.Entry.comparingByValue;
  * Multithreading is not implemented yet, but when it is, this class will contain all the worker-thread logic.
  */
 final class Worker {
+    private static final MathContext TEN_DIGIT_PRECISION = new MathContext(10, RoundingMode.HALF_EVEN);
     private final Scheduler scheduler;
 
     Worker(Scheduler scheduler) {
@@ -39,7 +42,7 @@ final class Worker {
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
         var nodeResult = weakUpdateBounds(job, nodeModel);
-        var nodeBound = roundBound(job, nodeResult.getValue());
+        var nodeBound = roundBound(nodeResult.getValue(), job.maxScale());
 
         // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
         if (!nodeResult.getState().isOptimal() || nodeBound >= job.getBestKnown()) {
@@ -97,14 +100,13 @@ final class Worker {
     /**
      * If all costs are integer, the bound can be tightened by rounding up to the nearest integer.
      * (We generalize this to any level of precision.)
+     * <p>
+     * Note that first we round to 10-digit precision, to control for numerical instability.
      */
-    private static double roundBound(Job job, double lb) {
-        return BigDecimal.valueOf(lb).setScale(job.maxScale(), RoundingMode.CEILING).doubleValue();
+    static double roundBound(double lb, int scale) {
+        return BigDecimal.valueOf(lb).round(TEN_DIGIT_PRECISION).setScale(scale, RoundingMode.CEILING).doubleValue();
     }
 
-    /**
-     * Static for a reason: sometimes we pass job as null
-     */
     static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
                                             BigDecimal[] demands,
                                             ExpressionsBasedModel model,
@@ -114,15 +116,15 @@ final class Worker {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
 
-        for (Set<OjAlgoCVRPSolver.Cut> rccCuts; result.getState().isOptimal() &&
+        for (Set<Cut> rccCuts; result.getState().isOptimal() &&
                 (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
-            if (lockingAddCuts(rccCuts, cuts, model, result, job, size)) {
+            if (addCuts(rccCuts, cuts, model, result, job, size) > 0) {
                 result = minimize(model, deadline);
                 continue;
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (lockingAddCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (addCuts(subtourCuts, cuts, model, result, job, size) > 0) {
                 result = minimize(model, deadline);
                 continue;
             }
@@ -141,15 +143,14 @@ final class Worker {
      * but avoids solving the NP-hard RCC-Sep model unless we have an invalid integer solution.
      */
     private static Optimisation.Result weakUpdateBounds(Job job, ExpressionsBasedModel model) {
-        var result = minimize(model, job.getDeadline());
+        var result = minimize(model, job.deadline());
         var cuts = new HashSet<Set<Integer>>();
-        var size = job.getDemands().length;
 
         while (result.getState().isOptimal()) {
-            var subtourCuts = SubtourCuts.generate(job.getVehicleCapacity(), job.getDemands(), result);
+            var subtourCuts = SubtourCuts.generate(job.vehicleCapacity(), job.demands(), result);
 
-            if (job.addCuts(subtourCuts, cuts, model, result, size)) {
-                result = minimize(model, job.getDeadline());
+            if (job.addCuts(subtourCuts, cuts, model, result) > 0) {
+                result = minimize(model, job.deadline());
                 continue;
             }
 
@@ -158,11 +159,11 @@ final class Worker {
             // we've validated that it satisfies the full set of constraints, so iterate on additional cuts.
             // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
             if (isInvalidIntegerSolution(job, result)) {
-                var rccCuts = RccSepCVRPCuts.generate(job.getVehicleCapacity(), job.getDemands(), result,
-                        job.getDeadline());
+                var rccCuts = RccSepCVRPCuts.generate(job.vehicleCapacity(), job.demands(), result,
+                        job.deadline());
 
-                if (rccCuts != null && job.addCuts(rccCuts, cuts, model, result, size)) {
-                    result = minimize(model, job.getDeadline());
+                if (rccCuts != null && job.addCuts(rccCuts, cuts, model, result) > 0) {
+                    result = minimize(model, job.deadline());
                     continue;
                 }
             }
@@ -174,10 +175,10 @@ final class Worker {
 
     // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.
     private static boolean isInvalidIntegerSolution(Job job, Optimisation.Result result) {
-        return isIntegerSolution(result) && findCycles(job.getDemands().length, result).stream().anyMatch(cycle ->
-                cycle.stream().map(i -> job.getDemands()[i])
+        return isIntegerSolution(result) && findCycles(job.demands().length, result).stream().anyMatch(cycle ->
+                cycle.stream().map(i -> job.demands()[i])
                         .reduce(ZERO, BigDecimal::add)
-                        .compareTo(job.getVehicleCapacity()) > 0);
+                        .compareTo(job.vehicleCapacity()) > 0);
     }
 
     private static boolean isIntegerSolution(Optimisation.Result result) {

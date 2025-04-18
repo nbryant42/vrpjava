@@ -82,6 +82,39 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
             assertEquals(OPTIMAL, actual.state());
             assertEquals(835.0, actual.objective());
+            assertEquals(4, actual.cycles().size());
+        }
+    }
+
+    // variant with 5 vehicles instead of 4. still solves quite quickly.
+    @Test
+    @Disabled
+    void eil33_k5() throws IOException {
+        try (var solver = newSolver()) {
+            var timeout = 300_000L;
+            solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
+
+            var actual = (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 6000, solver, true);
+
+            assertEquals(OPTIMAL, actual.state());
+            assertEquals(1019.0, actual.objective());
+            assertEquals(5, actual.cycles().size());
+        }
+    }
+
+    // variant with 6 vehicles instead of 4. no solution in sight after 5 minutes
+    @Test
+    @Disabled
+    void eil33_k6() throws IOException {
+        try (var solver = newSolver()) {
+            var timeout = 10_000L;
+            solver.setBestFirstMillis(timeout); // overriding here because JaCoCo slows tests down
+
+            var actual = (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 5384, solver, true);
+
+            assertEquals(HEURISTIC, actual.state());
+            assertEquals(1222.0, actual.objective());
+            assertEquals(6, actual.cycles().size());
         }
     }
 
@@ -313,20 +346,35 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var timeout = 300_000L;
 
         try (var solver = newSolver()) {
-            var result = doTestEil51(solver, timeout);
+            var result = doTestEil51(solver, timeout, 160);
 
             assertEquals(OPTIMAL, result.state());
             assertEquals(521.0, result.objective());
         }
     }
 
+    // variant with 6 vehicles instead of 5. no solution in sight after 5 minutes.
+    @Test
+    @Disabled
+    void eil51_k6() throws IOException {
+        var timeout = 30_000L;
 
-    Result doTestEil51(CVRPSolver solver, long timeout) throws IOException {
+        try (var solver = newSolver()) {
+            var result = doTestEil51(solver, timeout, 155);
+
+            assertEquals(HEURISTIC, result.state());
+            assertEquals(589.0, result.objective());
+        }
+    }
+
+
+    Result doTestEil51(CVRPSolver solver, long timeout, int capacity) throws IOException {
         var vrp = TsplibArchive.loadVrpInstance("eil51.vrp");
         var dim = vrp.dimension();
 
         System.out.println(vrp);
 
+        // total demand 777
         var demands = IntStream.of(0, 7, 30, 16, 9, 21, 15, 19, 23, 11, 5, 19, 29, 23, 21, 10, 15, 3, 41, 9, 28,
                         8, 8, 16, 10, 28, 7, 15, 14, 6, 19, 11, 12, 23, 26, 17, 6, 9, 15, 14, 7, 27, 13, 11, 16, 10, 5,
                         25, 17, 18, 10)
@@ -334,10 +382,9 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 .mapToObj(BigDecimal::valueOf).toArray(BigDecimal[]::new);
 
         var costs = buildCosts(true, dim, vrp);
-        var capacity = BigDecimal.valueOf(160);
         var minVehicles = 1;
         var start = System.currentTimeMillis();
-        var result = solver.solve(minVehicles, capacity, demands, costs, timeout);
+        var result = solver.solve(minVehicles, BigDecimal.valueOf(capacity), demands, costs, timeout);
 
         System.out.println("Total elapsed: " + (System.currentTimeMillis() - start) + " ms");
 
@@ -412,7 +459,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     }
 
     // This one's interesting. I think it's probably the same "P-n101-k4" used by Lysgaard et al.
-    // Our time to bound the root node is competitive with theirs, but we search a lot more nodes to find the optimum.
+    // Our time to bound the root node can be competitive with theirs, but we search a lot more nodes to find the
+    // optimum, and sometimes ojAlgo gets stuck solving the RCC-Sep model. (It would be nice to have CPLEX here.)
     // Example log:
     // [87.473s]: Switching to best-first search. Bounds now 673.425729429/758.0 (88.84%); 118 cuts, 0 nodes. Next node has bound null
     // [211.168s]: New solution. Bounds now 675.825/685.0 (98.66%); 209 cuts, 2502 nodes. Next node has bound 681.0
@@ -481,5 +529,12 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         assertEquals(1, base(2));
         assertEquals(3, base(3));
         assertEquals(6, base(4));
+    }
+
+    @Test
+    void roundBound() {
+        // This case looks like numerical instability, so round to 10-digit precision before taking the ceiling.
+        assertEquals(1132.0, Worker.roundBound(1132.000000148, 0));
+        assertEquals(1132.0, Worker.roundBound(1131.999999904, 0));
     }
 }
