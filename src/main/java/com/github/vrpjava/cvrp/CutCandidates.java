@@ -9,7 +9,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static java.lang.Math.min;
-import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.isViolated;
+import static com.github.vrpjava.cvrp.Job.isViolated;
 
 class CutCandidates {
     private final int size;

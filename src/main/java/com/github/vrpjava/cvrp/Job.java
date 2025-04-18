@@ -22,11 +22,15 @@ import static com.github.vrpjava.Util.newModel;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildConstraints;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildVars;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.getVariable_noFlip;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.toSeconds;
+import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
 import static com.github.vrpjava.cvrp.Worker.updateBounds;
 import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Math.max;
+import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
+import static org.ojalgo.function.constant.BigMath.HALF;
 import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
 /**
@@ -34,6 +38,8 @@ import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
  * and functions as the coordination point for worker threads.
  */
 class Job {
+    private static final BigDecimal MINUS_HALF = HALF.negate();
+
     private final OjAlgoCVRPSolver solver;
     private final BigDecimal vehicleCapacity;
     private final BigDecimal[] demands;
@@ -92,6 +98,88 @@ class Job {
         model.relax();
 
         return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
+    }
+
+    private static boolean addCuts(Collection<Cut> candidates,
+                                   Set<Set<Integer>> cuts,
+                                   ExpressionsBasedModel model,
+                                   Optimisation.Result result,
+                                   Job job,
+                                   int size) {
+        return candidates.stream().map(cut -> {
+                    var subset = cut.subset();
+                    subset.remove(0);
+
+                    if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
+                        int minVehicles = cut.minVehicles();
+                        var name = formatCut(subset);
+
+                        addCut(size, model, subset, name, minVehicles);
+                        if (job != null) {
+                            addCut(job.demands.length, job.globalBounds.getModel(), subset, name, minVehicles);
+                            // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
+                            job.globalBounds.clearResult();
+                        }
+                        return true;
+                    }
+                    return false;
+                })
+                .reduce(false, (a, b) -> a || b);
+    }
+
+    static boolean isViolated(Optimisation.Result result,
+                              int size,
+                              Set<Integer> subset,
+                              int minVehicles) {
+        var min = minVehicles * 2L;
+        var total = ZERO;
+
+        for (var target : subset) {
+            for (var row = 1; row < size; row++) {
+                for (var col = 0; col < row; col++) {
+                    if (target == row && !subset.contains(col) ||
+                            target == col && !subset.contains(row)) {
+                        total = total.add(getVariable_noFlip(row, col, result));
+                    }
+                }
+            }
+        }
+
+        return total.compareTo(BigDecimal.valueOf(min)) < 0;
+    }
+
+    private static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long minVehicles) {
+        if (subset.size() <= size * (size + 1) / (2 * size - 2)) {
+            // Use constraint form (1.3)
+
+            var cut = model.newExpression(name).upper(subset.size() - minVehicles);
+
+            for (var row : subset) {
+                for (var col : subset) {
+                    if (col < row) {
+                        cut.set(getVariable_noFlip(row, col, model), ONE);
+                    }
+                }
+            }
+        } else {
+            // Use constraint form (4.1)
+
+            var cut = model.newExpression(name).upper(size - 1 - subset.size() - minVehicles);
+
+            for (var row = 1; row < size; row++) {
+                if (subset.contains(row)) {
+                    cut.set(getVariable_noFlip(row, 0, model), MINUS_HALF);
+                } else {
+                    cut.set(getVariable_noFlip(row, 0, model), HALF);
+
+                    for (var col = 1; col < row; col++) {
+                        if (!subset.contains(col)) {
+                            cut.set(getVariable_noFlip(row, col, model), ONE);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Result run() {
@@ -254,20 +342,21 @@ class Job {
         return maxScale;
     }
 
-    static boolean addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
-                           Optimisation.Result result, Job job, int size) {
-        if (job == null) {
-            return OjAlgoCVRPSolver.addCuts(rccCuts, cuts, model, result, null, size);
-        }
-        synchronized (job.globalBounds) {
-            return OjAlgoCVRPSolver.addCuts(rccCuts, cuts, model, result, job, size);
-        }
+    /**
+     * If we're also propagating cuts to the global model (<code>job</code> is not null), then we need to acquire the
+     * <code>globalBounds</code> lock first. This method decides whether that's necessary.
+     */
+    static boolean lockingAddCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
+                                  Optimisation.Result result, Job job, int size) {
+        return job == null ? addCuts(rccCuts, cuts, model, result, null, size) :
+                job.addCuts(rccCuts, cuts, model, result, size);
     }
 
-    void addCut(Set<Integer> subset, String name, long minVehicles) {
-        OjAlgoCVRPSolver.addCut(demands.length, globalBounds.getModel(), subset, name, minVehicles);
-        // don't calculate the result here, only lazily when needed, otherwise we'll duplicate effort.
-        globalBounds.clearResult();
+    boolean addCuts(Collection<Cut> rccCuts, Set<Set<Integer>> cuts, ExpressionsBasedModel model,
+                    Optimisation.Result result, int size) {
+        synchronized (globalBounds) {
+            return addCuts(rccCuts, cuts, model, result, this, size);
+        }
     }
 
     boolean isBestFirst() {

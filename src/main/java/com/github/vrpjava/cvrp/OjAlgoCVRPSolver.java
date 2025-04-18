@@ -19,12 +19,10 @@ import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.setTimeout;
 import static com.github.vrpjava.cvrp.CutCandidates.round;
-import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.ojalgo.function.constant.BigMath.HALF;
 
 /**
  * Service facade for the ojAlgo-based solver for the Capacitated Vehicle Routing Problem (CVRP).
@@ -51,7 +49,6 @@ import static org.ojalgo.function.constant.BigMath.HALF;
  */
 public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     private final Scheduler scheduler = new Scheduler();
-    private static final BigDecimal MINUS_HALF = HALF.negate();
     private boolean debug;
 
     /**
@@ -94,104 +91,6 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
 
     static BigDecimal toSeconds(long val) {
         return BigDecimal.valueOf(val).divide(BigDecimal.valueOf(1000L), 3, RoundingMode.HALF_EVEN);
-    }
-
-    static boolean addCuts(Collection<Cut> candidates,
-                           Set<Set<Integer>> cuts,
-                           ExpressionsBasedModel model,
-                           Optimisation.Result result,
-                           Job job,
-                           int size) {
-        return candidates.stream().map(cut -> addCut(cuts, model, result, job, cut, size))
-                .reduce(false, (a, b) -> a || b);
-    }
-
-    private static boolean addCut(Set<Set<Integer>> cuts,
-                                  ExpressionsBasedModel model,
-                                  Optimisation.Result result,
-                                  Job job,
-                                  Cut cut,
-                                  int size) {
-        var subset = cut.subset();
-        subset.remove(0);
-
-        if (isViolated(result, size, subset, cut.minVehicles()) && cuts.add(subset)) {
-            addCut(size, model, job, subset, cut.minVehicles());
-            return true;
-        }
-        return false;
-    }
-
-    // add a cut to the node-local model, and also propagate it to the global model
-    // if `globalBounds` is not null.
-    private static void addCut(int size,
-                               ExpressionsBasedModel model,
-                               Job job,
-                               Set<Integer> subset,
-                               int minVehicles) {
-        var name = formatCut(subset);
-
-        //debug("Adding " + name + " >= " + min);
-
-        addCut(size, model, subset, name, minVehicles);
-        if (job != null) {
-            job.addCut(subset, name, minVehicles);
-        }
-    }
-
-    static void addCut(int size, ExpressionsBasedModel model, Set<Integer> subset, String name, long minVehicles) {
-        if (subset.size() <= size * (size + 1) / (2 * size - 2)) {
-            // Use constraint form (1.3)
-
-            var cut = model.newExpression(name).upper(subset.size() - minVehicles);
-
-            for (var row : subset) {
-                for (var col : subset) {
-                    if (col < row) {
-                        cut.set(getVariable_noFlip(row, col, model), ONE);
-                    }
-                }
-            }
-        } else {
-            // Use constraint form (4.1)
-
-            var cut = model.newExpression(name).upper(size - 1 - subset.size() - minVehicles);
-
-            for (var row = 1; row < size; row++) {
-                if (subset.contains(row)) {
-                    cut.set(getVariable_noFlip(row, 0, model), MINUS_HALF);
-                } else {
-                    cut.set(getVariable_noFlip(row, 0, model), HALF);
-
-                    for (var col = 1; col < row; col++) {
-                        if (!subset.contains(col)) {
-                            cut.set(getVariable_noFlip(row, col, model), ONE);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    static boolean isViolated(Optimisation.Result result,
-                              int size,
-                              Set<Integer> subset,
-                              int minVehicles) {
-        var min = minVehicles * 2L;
-        var total = ZERO;
-
-        for (var target : subset) {
-            for (var row = 1; row < size; row++) {
-                for (var col = 0; col < row; col++) {
-                    if (target == row && !subset.contains(col) ||
-                            target == col && !subset.contains(row)) {
-                        total = total.add(getVariable_noFlip(row, col, result));
-                    }
-                }
-            }
-        }
-
-        return total.compareTo(BigDecimal.valueOf(min)) < 0;
     }
 
     static Optimisation.Result minimize(ExpressionsBasedModel model, long deadline) {
@@ -242,7 +141,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      * Get a {@link Variable} from the model. This will convert the row/column address to a linear address,
      * but will NOT flip row/col; use this variant only when you are certain that `row > col`
      */
-    private static Variable getVariable_noFlip(int row, int col, ExpressionsBasedModel model) {
+    static Variable getVariable_noFlip(int row, int col, ExpressionsBasedModel model) {
         return model.getVariable(base(row) + col);
     }
 

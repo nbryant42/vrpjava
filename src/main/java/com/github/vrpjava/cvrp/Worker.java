@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
+import static com.github.vrpjava.cvrp.Job.lockingAddCuts;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
@@ -115,13 +116,13 @@ final class Worker {
 
         for (Set<OjAlgoCVRPSolver.Cut> rccCuts; result.getState().isOptimal() &&
                 (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
-            if (Job.addCuts(rccCuts, cuts, model, result, job, size)) {
+            if (lockingAddCuts(rccCuts, cuts, model, result, job, size)) {
                 result = minimize(model, deadline);
                 continue;
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
-            if (Job.addCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (lockingAddCuts(subtourCuts, cuts, model, result, job, size)) {
                 result = minimize(model, deadline);
                 continue;
             }
@@ -137,8 +138,7 @@ final class Worker {
     /**
      * Update the bounds model, when called from a search node. This is similar to
      * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, Job, long)},
-     * but does not solve the RCC-Sep model unless absolutely necessary.
-     * (we need to check validity. when the node solution is integer)
+     * but avoids solving the NP-hard RCC-Sep model unless we have an invalid integer solution.
      */
     private static Optimisation.Result weakUpdateBounds(Job job, ExpressionsBasedModel model) {
         var result = minimize(model, job.getDeadline());
@@ -148,7 +148,7 @@ final class Worker {
         while (result.getState().isOptimal()) {
             var subtourCuts = SubtourCuts.generate(job.getVehicleCapacity(), job.getDemands(), result);
 
-            if (Job.addCuts(subtourCuts, cuts, model, result, job, size)) {
+            if (job.addCuts(subtourCuts, cuts, model, result, size)) {
                 result = minimize(model, job.getDeadline());
                 continue;
             }
@@ -161,7 +161,7 @@ final class Worker {
                 var rccCuts = RccSepCVRPCuts.generate(job.getVehicleCapacity(), job.getDemands(), result,
                         job.getDeadline());
 
-                if (rccCuts != null && Job.addCuts(rccCuts, cuts, model, result, job, size)) {
+                if (rccCuts != null && job.addCuts(rccCuts, cuts, model, result, size)) {
                     result = minimize(model, job.getDeadline());
                     continue;
                 }
