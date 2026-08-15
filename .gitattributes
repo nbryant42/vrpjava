@@ -1,2 +1,5 @@
+# Keep repository text files stable across operating systems.
+* text=auto eol=lf
+
 /mvnw text eol=lf
 *.cmd text eol=crlf
