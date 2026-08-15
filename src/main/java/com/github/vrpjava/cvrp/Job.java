@@ -1,7 +1,9 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.cvrp.CVRPSolver.Result;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.ExperimentalParameters;
 import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.SolveStatistics;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -45,10 +47,16 @@ class Job {
     private final BigDecimal[] demands;
     private final long start;
     private final long deadline; // TODO replace usages with nanoTime
+    private final ExperimentalParameters parameters;
     private final Result kickstarter;
     @GuardedBy("globalBounds")
     private final GlobalBounds globalBounds;
     private final int maxScale;
+    private final long heuristicMillis;
+    private final long rootMillis;
+    private final long rootCuts;
+    private Optimisation.State rootState;
+    private double rootBound = Double.NaN;
     @GuardedBy("this")
     private boolean done;
     @GuardedBy("this")
@@ -76,9 +84,15 @@ class Job {
         this.vehicleCapacity = vehicleCapacity;
         this.demands = demands;
         this.deadline = start + timeout;
+        this.parameters = solver.getExperimentalParameters();
+        var phaseStart = System.currentTimeMillis();
         this.kickstarter = solver.getHeuristic().doSolve(minVehicles, vehicleCapacity, demands, costMatrix,
                 timeout);
-        this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline);
+        this.heuristicMillis = System.currentTimeMillis() - phaseStart;
+        phaseStart = System.currentTimeMillis();
+        this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline, parameters);
+        this.rootMillis = System.currentTimeMillis() - phaseStart;
+        this.rootCuts = countCuts();
         this.maxScale = maxScale(costMatrix);
     }
 
@@ -98,13 +112,20 @@ class Job {
 
     static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
                                    BigDecimal[][] costMatrix, long deadline) {
+        return initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline,
+                ExperimentalParameters.defaults());
+    }
+
+    private static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
+                                           BigDecimal[][] costMatrix, long deadline,
+                                           ExperimentalParameters parameters) {
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
 
         buildConstraints(model, minVehicles, vars);
         model.relax();
 
-        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline));
+        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline, parameters));
     }
 
     private static int doAddCuts(Collection<Cut> candidates,
@@ -191,6 +212,10 @@ class Job {
 
     Result run() {
         var globalBoundsResult = globalBounds.getResult(deadline);
+        rootState = globalBoundsResult.getState();
+        if (rootState.isOptimal()) {
+            rootBound = globalBoundsResult.getValue();
+        }
 
         if (kickstarter.state() != Result.State.HEURISTIC) {
             // This theoretically can't happen now that I've removed the ill-considered `maxVehicles` parameter, but
@@ -211,7 +236,7 @@ class Job {
             }
         }
 
-        var globalBound = roundBound(globalBoundsResult.getValue(), maxScale);
+        var globalBound = roundBound(rootBound, maxScale);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
         // of variable IDs and values to be fixed in the model.
@@ -288,15 +313,19 @@ class Job {
 
     private Result buildResult(Result.State myState, Optimisation.Result incumbent, int nodes, double objective) {
         var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
+        var cuts = countCuts();
 
         solver.debug(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
         var cycleDemands = cycles.stream()
                 .map(cycle -> cycle.stream().map(i -> demands[i]).reduce(ZERO, BigDecimal::add))
                 .toList();
         solver.debug("Cycle demands: " + cycleDemands);
-        solver.debug("Currently " + countCuts() + " cuts.");
+        solver.debug("Currently " + cuts + " cuts.");
 
-        return new Result(myState, objective, cycles);
+        var result = new Result(myState, objective, cycles);
+        solver.reportStatistics(new SolveStatistics(parameters, heuristicMillis, rootState, rootBound, rootMillis,
+                rootCuts, nodes, cuts, System.currentTimeMillis() - start));
+        return result;
     }
 
     private record JobSnapshot(Result.State state,
@@ -331,8 +360,7 @@ class Job {
                 (peek == null ? null : peek.bound());
 
         synchronized (this) {
-            if (queue instanceof PriorityQueue<Node> || ratio <= solver.getBestFirstRatio() ||
-                    elapsed >= solver.getBestFirstMillis()) {
+            if (queue instanceof PriorityQueue<Node> || !parameters.useBestFirst(ratio, elapsed)) {
                 return "[" + toSeconds(elapsed) + "s]: " + descriptor + " solution. Bounds now " + suffix;
             }
             // Found a feasible solution, and bounds are tight enough that best-first search may help.
@@ -364,6 +392,14 @@ class Job {
 
     long deadline() {
         return deadline;
+    }
+
+    boolean useRccAtDepth(int depth) {
+        return parameters.useRccAtDepth(depth);
+    }
+
+    long rccDeadline() {
+        return parameters.rccDeadline(deadline);
     }
 
     int maxScale() {

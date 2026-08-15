@@ -5,19 +5,24 @@ import io.github.lmores.tsplib.vrp.VrpInstance;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.HEURISTIC;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.ExperimentalParameters;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.SearchStrategy;
 import static com.github.vrpjava.cvrp.Job.initBounds;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.base;
 import static java.lang.Math.min;
@@ -25,6 +30,7 @@ import static java.lang.Math.pow;
 import static java.lang.Math.sqrt;
 import static java.math.BigDecimal.ZERO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.ojalgo.optimisation.Optimisation.State.UNEXPLORED;
@@ -351,6 +357,67 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             assertEquals(OPTIMAL, result.state());
             assertEquals(521.0, result.objective());
         }
+    }
+
+    /**
+     * Opt-in experiment harness. Run with {@code -Dvrp.benchmark=eil33} and optionally set:
+     * {@code vrp.trials}, {@code vrp.timeoutMillis}, {@code vrp.searchStrategy}, {@code vrp.rccDepth},
+     * {@code vrp.rccMillis}, {@code vrp.bestFirstRatio}, and {@code vrp.bestFirstMillis}.
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil33|all")
+    void benchmarkEil33() throws IOException {
+        runBenchmark("eil33", 300_000L, (solver, timeout) ->
+                (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+    }
+
+    /** See {@link #benchmarkEil33()}. */
+    @Test
+    @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil51|all")
+    void benchmarkEil51() throws IOException {
+        runBenchmark("eil51", 300_000L, (solver, timeout) -> doTestEil51(solver, timeout, 160));
+    }
+
+    private void runBenchmark(String instance, long defaultTimeout, BenchmarkSolve solve) throws IOException {
+        var defaults = ExperimentalParameters.defaults();
+        var parameters = new ExperimentalParameters(
+                SearchStrategy.valueOf(System.getProperty("vrp.searchStrategy",
+                        defaults.searchStrategy().name()).toUpperCase(Locale.ROOT)),
+                Integer.getInteger("vrp.rccDepth", defaults.maxRccDepth()),
+                Long.getLong("vrp.rccMillis", defaults.rccMillis()),
+                Double.parseDouble(System.getProperty("vrp.bestFirstRatio",
+                        Double.toString(defaults.bestFirstRatio()))),
+                Long.getLong("vrp.bestFirstMillis", defaults.bestFirstMillis()));
+        var timeout = Long.getLong("vrp.timeoutMillis", defaultTimeout);
+        var trials = Integer.getInteger("vrp.trials", 3);
+        if (trials <= 0) {
+            throw new IllegalArgumentException("vrp.trials must be positive.");
+        }
+
+        System.out.println("instance,trial,strategy,rccDepth,rccMillis,rootState,rootBound,rootMillis,rootCuts," +
+                "nodes,cuts,elapsedMillis,resultState,objective");
+        for (var trial = 1; trial <= trials; trial++) {
+            var statistics = new AtomicReference<OjAlgoCVRPSolver.SolveStatistics>();
+            Result result;
+            try (var solver = new OjAlgoCVRPSolver()) {
+                solver.setExperimentalParameters(parameters);
+                solver.setStatisticsConsumer(statistics::set);
+                result = solve.solve(solver, timeout);
+            }
+
+            var stats = statistics.get();
+            assertNotNull(stats);
+            System.out.printf(Locale.ROOT,
+                    "%s,%d,%s,%d,%d,%s,%.12f,%d,%d,%d,%d,%d,%s,%.12f%n",
+                    instance, trial, parameters.searchStrategy(), parameters.maxRccDepth(), parameters.rccMillis(),
+                    stats.rootState(), stats.rootBound(), stats.rootMillis(), stats.rootCuts(), stats.nodes(),
+                    stats.cuts(), stats.elapsedMillis(), result.state(), result.objective());
+        }
+    }
+
+    @FunctionalInterface
+    private interface BenchmarkSolve {
+        Result solve(OjAlgoCVRPSolver solver, long timeout) throws IOException;
     }
 
     // variant with 6 vehicles instead of 5. no solution in sight after 5 minutes.

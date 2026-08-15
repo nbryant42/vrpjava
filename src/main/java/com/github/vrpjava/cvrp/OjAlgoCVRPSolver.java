@@ -13,7 +13,9 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -53,6 +55,98 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     private boolean debug;
 
     /**
+     * Search queue policy used after the root relaxation has been bounded.
+     */
+    public enum SearchStrategy {
+        /** Use the historical bound-ratio and elapsed-time heuristic. */
+        AUTO,
+        /** Retain the LIFO queue for the entire search. */
+        DEPTH_FIRST,
+        /** Switch to the lower-bound priority queue immediately. */
+        BEST_FIRST
+    }
+
+    /**
+     * Explicit controls for branch-and-cut experiments.
+     *
+     * @param searchStrategy search queue policy
+     * @param maxRccDepth maximum branch depth at which to run full RCC separation; zero means root relaxation only
+     * @param rccMillis maximum wall-clock time for each RCC separation call; zero disables full RCC separation
+     * @param bestFirstRatio lower-bound/incumbent ratio required by {@link SearchStrategy#AUTO}
+     * @param bestFirstMillis latest elapsed time at which {@link SearchStrategy#AUTO} may switch queue policy
+     */
+    public record ExperimentalParameters(SearchStrategy searchStrategy,
+                                         int maxRccDepth,
+                                         long rccMillis,
+                                         double bestFirstRatio,
+                                         long bestFirstMillis) {
+        public ExperimentalParameters {
+            Objects.requireNonNull(searchStrategy, "searchStrategy");
+            if (maxRccDepth < 0) {
+                throw new IllegalArgumentException("maxRccDepth must be nonnegative.");
+            }
+            if (rccMillis < 0) {
+                throw new IllegalArgumentException("rccMillis must be nonnegative.");
+            }
+            if (!(bestFirstRatio > 0.0 && bestFirstRatio <= 1.0)) {
+                throw new IllegalArgumentException("bestFirstRatio must be in (0, 1].");
+            }
+            if (bestFirstMillis < 0) {
+                throw new IllegalArgumentException("bestFirstMillis must be nonnegative.");
+            }
+        }
+
+        public static ExperimentalParameters defaults() {
+            return new ExperimentalParameters(SearchStrategy.AUTO, 0, Long.MAX_VALUE, 0.85, 30_000L);
+        }
+
+        boolean useRccAtDepth(int depth) {
+            return rccMillis > 0 && depth > 0 && depth <= maxRccDepth;
+        }
+
+        long rccDeadline(long solveDeadline) {
+            if (rccMillis == Long.MAX_VALUE) {
+                return solveDeadline;
+            }
+            var now = System.currentTimeMillis();
+            var budgetDeadline = rccMillis > Long.MAX_VALUE - now ? Long.MAX_VALUE : now + rccMillis;
+            return Math.min(solveDeadline, budgetDeadline);
+        }
+
+        boolean useBestFirst(double boundRatio, long elapsedMillis) {
+            return switch (searchStrategy) {
+                case AUTO -> boundRatio > bestFirstRatio && elapsedMillis < bestFirstMillis;
+                case DEPTH_FIRST -> false;
+                case BEST_FIRST -> true;
+            };
+        }
+    }
+
+    /**
+     * Measurements emitted once for each completed solve.
+     *
+     * @param parameters immutable parameter snapshot used by the job
+     * @param heuristicMillis time spent finding the initial incumbent
+     * @param rootState solver state for the root relaxation
+     * @param rootBound root-relaxation objective, or {@link Double#NaN} when it was not solved optimally
+     * @param rootMillis time spent building and separating the root relaxation
+     * @param rootCuts cuts present when branch-and-bound began
+     * @param nodes search nodes removed from the queue
+     * @param cuts cuts present at the end of the solve
+     * @param elapsedMillis total solve time
+     */
+    public record SolveStatistics(ExperimentalParameters parameters,
+                                  long heuristicMillis,
+                                  Optimisation.State rootState,
+                                  double rootBound,
+                                  long rootMillis,
+                                  long rootCuts,
+                                  int nodes,
+                                  long cuts,
+                                  long elapsedMillis) {
+    }
+
+    /**
      * Default constructor.
      */
     public OjAlgoCVRPSolver() {
@@ -63,8 +157,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
         scheduler = new Scheduler(processorDecorator);
     }
 
-    private double bestFirstRatio = 0.85;
-    private long bestFirstMillis = 30_000L;
+    private volatile ExperimentalParameters experimentalParameters = ExperimentalParameters.defaults();
+    private volatile Consumer<SolveStatistics> statisticsConsumer = ignored -> { };
     private CVRPSolver heuristic = new ClarkeWrightCVRPSolver();
 
     record Cut(int minVehicles, Set<Integer> subset) {
@@ -391,7 +485,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      */
     @SuppressWarnings("unused")
     public double getBestFirstRatio() {
-        return bestFirstRatio;
+        return experimentalParameters.bestFirstRatio();
     }
 
     /**
@@ -402,7 +496,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      */
     @SuppressWarnings("unused")
     public long getBestFirstMillis() {
-        return bestFirstMillis;
+        return experimentalParameters.bestFirstMillis();
     }
 
     /**
@@ -417,8 +511,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      * @param bestFirstRatio the minimum ratio.
      */
     @SuppressWarnings("unused")
-    public void setBestFirstRatio(double bestFirstRatio) {
-        this.bestFirstRatio = bestFirstRatio;
+    public synchronized void setBestFirstRatio(double bestFirstRatio) {
+        var current = experimentalParameters;
+        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.maxRccDepth(),
+                current.rccMillis(), bestFirstRatio, current.bestFirstMillis());
     }
 
     /**
@@ -428,8 +524,35 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      *                        switching to best-first search.
      */
     @SuppressWarnings("unused")
-    public void setBestFirstMillis(long bestFirstMillis) {
-        this.bestFirstMillis = bestFirstMillis;
+    public synchronized void setBestFirstMillis(long bestFirstMillis) {
+        var current = experimentalParameters;
+        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.maxRccDepth(),
+                current.rccMillis(), current.bestFirstRatio(), bestFirstMillis);
+    }
+
+    /**
+     * Return the immutable parameter snapshot that will be used by newly created jobs.
+     */
+    public ExperimentalParameters getExperimentalParameters() {
+        return experimentalParameters;
+    }
+
+    /**
+     * Configure subsequent solve calls. A running job retains the snapshot it started with.
+     */
+    public void setExperimentalParameters(ExperimentalParameters experimentalParameters) {
+        this.experimentalParameters = Objects.requireNonNull(experimentalParameters, "experimentalParameters");
+    }
+
+    /**
+     * Receive one statistics record after each solve. Concurrent solve calls may invoke the consumer concurrently.
+     */
+    public void setStatisticsConsumer(Consumer<SolveStatistics> statisticsConsumer) {
+        this.statisticsConsumer = Objects.requireNonNull(statisticsConsumer, "statisticsConsumer");
+    }
+
+    void reportStatistics(SolveStatistics statistics) {
+        statisticsConsumer.accept(statistics);
     }
 
     /**

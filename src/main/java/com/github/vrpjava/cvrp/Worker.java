@@ -1,6 +1,7 @@
 package com.github.vrpjava.cvrp;
 
 import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.Cut;
+import com.github.vrpjava.cvrp.OjAlgoCVRPSolver.ExperimentalParameters;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
@@ -46,7 +47,7 @@ final class Worker {
         var nodeModel = job.copyGlobalBoundsModel();
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
-        var evaluation = weakUpdateBounds(job, nodeModel);
+        var evaluation = weakUpdateBounds(job, nodeModel, node.depth());
         var nodeResult = evaluation.result();
 
         if (nodeResult.getState() == INFEASIBLE) {
@@ -162,16 +163,25 @@ final class Worker {
                                             BigDecimal[] demands,
                                             ExpressionsBasedModel model,
                                             Job job,
-                                            long deadline) {
+                                            long deadline,
+                                            ExperimentalParameters parameters) {
         var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
+        var rccEnabled = parameters.rccMillis() > 0;
 
-        for (Set<Cut> rccCuts; result.getState().isOptimal() &&
-                (rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result, deadline)) != null; ) {
-            if (addCuts(rccCuts, cuts, model, result, job, size) > 0) {
-                result = minimize(model, deadline);
-                continue;
+        while (result.getState().isOptimal()) {
+            if (rccEnabled) {
+                var rccCuts = RccSepCVRPCuts.generate(vehicleCapacity, demands, result,
+                        parameters.rccDeadline(deadline));
+                if (rccCuts == null) {
+                    // The optional separator exhausted its budget. Continue with the cheap separator and the exact
+                    // branch-and-bound search.
+                    rccEnabled = false;
+                } else if (addCuts(rccCuts, cuts, model, result, job, size) > 0) {
+                    result = minimize(model, deadline);
+                    continue;
+                }
             }
             var subtourCuts = SubtourCuts.generate(vehicleCapacity, demands, result);
 
@@ -190,14 +200,25 @@ final class Worker {
 
     /**
      * Update the bounds model, when called from a search node. This is similar to
-     * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, Job, long)},
+     * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, Job, long, ExperimentalParameters)},
      * but uses directly derived capacity cuts to reject invalid integer routes without solving another ILP.
      */
-    private static NodeEvaluation weakUpdateBounds(Job job, ExpressionsBasedModel model) {
+    private static NodeEvaluation weakUpdateBounds(Job job, ExpressionsBasedModel model, int depth) {
         var result = minimize(model, job.deadline());
         var cuts = new HashSet<Set<Integer>>();
+        var rccEnabled = job.useRccAtDepth(depth);
 
         while (result.getState().isOptimal()) {
+            if (rccEnabled) {
+                var rccCuts = RccSepCVRPCuts.generate(job.vehicleCapacity(), job.demands(), result,
+                        job.rccDeadline());
+                if (rccCuts == null) {
+                    rccEnabled = false;
+                } else if (job.addCuts(rccCuts, cuts, model, result) > 0) {
+                    result = minimize(model, job.deadline());
+                    continue;
+                }
+            }
             var subtourCuts = SubtourCuts.generate(job.vehicleCapacity(), job.demands(), result);
 
             if (job.addCuts(subtourCuts, cuts, model, result) > 0) {

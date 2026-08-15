@@ -7,15 +7,19 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.github.vrpjava.Util.lookup;
 import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static com.github.vrpjava.cvrp.CVRPSolver.Result.State.OPTIMAL;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.ExperimentalParameters;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.SearchStrategy.BEST_FIRST;
 import static java.math.BigDecimal.ZERO;
 import static java.math.BigDecimal.valueOf;
 import static java.util.stream.IntStream.range;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OjAlgoCVRPSolverOracleTest {
@@ -55,10 +59,20 @@ class OjAlgoCVRPSolverOracleTest {
                 {valueOf(1), valueOf(1), ZERO}};
 
         try (var solver = new OjAlgoCVRPSolver()) {
+            var statistics = new AtomicReference<OjAlgoCVRPSolver.SolveStatistics>();
+            var parameters = new ExperimentalParameters(BEST_FIRST, 0, 0L, 0.85, 30_000L);
+            solver.setExperimentalParameters(parameters);
+            solver.setStatisticsConsumer(statistics::set);
             var actual = solver.solve(2, valueOf(2), demands, costs, 10_000L);
+            var stats = statistics.get();
 
             assertEquals(4.0, actual.objective());
             assertEquals(OPTIMAL, actual.state());
+            assertNotNull(stats);
+            assertEquals(parameters, stats.parameters());
+            assertTrue(stats.rootState().isOptimal());
+            assertEquals(4.0, stats.rootBound());
+            assertTrue(stats.elapsedMillis() >= 0L);
         }
     }
 

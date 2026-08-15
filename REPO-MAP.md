@@ -13,6 +13,9 @@ usage notes, performance observations, and the non-commercial license.
   `CVRPSolver.Result` with a `State`, objective, and set of routes.
 - `com.github.vrpjava.cvrp.OjAlgoCVRPSolver` is the exact symmetric CVRP facade. One instance owns a scheduler and worker
   threads, so callers should reuse it and close it (prefer try-with-resources).
+- `OjAlgoCVRPSolver.ExperimentalParameters` snapshots search strategy, node RCC depth, per-call RCC budget, and the
+  automatic search thresholds for each job. `SolveStatistics` reports root bound/time/cuts and final nodes/cuts/time
+  through a per-solve callback; it does not use shared "last run" state.
 - `ClarkeWrightCVRPSolver` and `NearestNeighborCVRPSolver` are CVRP heuristics. Clarke-Wright is the exact solver's
   default incumbent generator and is replaceable through `setHeuristic(...)`.
 - `com.github.vrpjava.atsp.ATSPSolver` is the ATSP base API and also contains a nearest-neighbor heuristic.
@@ -60,7 +63,8 @@ Supporting classes:
 - `src/test/java/com/github/vrpjava/atsp`: nearest-neighbor and exact ATSP behavior.
 - `src/test/java/com/github/vrpjava/cvrp/AbstractCVRPSolverTest.java`: shared heuristic contract tests.
 - `src/test/java/com/github/vrpjava/cvrp/OjAlgoCVRPSolverTest.java`: exact-solver examples, timeout behavior, helpers,
-  and disabled larger benchmarks.
+  disabled larger examples, and opt-in property-driven `eil33`/`eil51` benchmark harnesses.
+- `BENCHMARKS.md`: benchmark properties, methodology cautions, and dated experimental observations.
 - `src/test/resources/com/github/vrpjava/large-problem.json`: larger fixture used by solver tests.
 
 Use tiny deterministic instances for regressions. For exactness, independently verify route structure and objective;

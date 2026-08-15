@@ -57,7 +57,10 @@ The algorithm first iterates on the RCC-Sep procedure (which is itself NP-hard) 
 generate additional cuts. Then it proceeds with a parallel, best-first branch-and-cut search, but the strategy for the
 non-root nodes is different from the root node. Here, it uses inexpensive connected-component cuts and derives a
 rounded-capacity cut directly from any integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved
-for tightening the root relaxation.
+for tightening the root relaxation by default. `OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC
+separation through a selected branch depth and cap each separator call. These are performance controls only: optional
+separation may strengthen the relaxation, but candidate validation and exhaustive branching remain responsible for
+exactness.
 
 There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the
 hardest problem instances, we may not be able to solve to optimality, so the goal would be to merely generate an
@@ -66,12 +69,23 @@ hand, so in this case, the algorithm starts out with a depth-first branch-and-cu
 best-known-solution is close enough to the lower bound, it switches to a best-first search by changing the node stack to
 a priority queue on the fly. There are two configurable thresholds to limit whether and when this switch happens.
 
-See the methods `OjAlgoCVRPSolver.setBestFirstMillis()` and `OjAlgoCVRPSolver.setBestFirstRatio()`
-for those parameters.
+The experimental parameter record can select automatic, always-depth-first, or always-best-first search. The existing
+`setBestFirstMillis()` and `setBestFirstRatio()` methods configure the thresholds used by automatic mode.
 
 (This auto-detection logic doesn't work very well, so the default settings are currently biased towards best-first
 search. The problem is that the Clarke-Wright heuristic is actually pretty good, so even for some of the hard problems
 we now start out with a higher bounds ratio.)
+
+The opt-in `benchmarkEil33` and `benchmarkEil51` tests print CSV rows containing the root state and bound, root time and
+cut count, searched nodes, final cuts, total runtime, and result. For example, from PowerShell:
+
+```powershell
+.\mvnw.cmd "-Dtest=OjAlgoCVRPSolverTest#benchmarkEil33" "-Dvrp.benchmark=eil33" `
+  "-Dvrp.trials=5" "-Dvrp.searchStrategy=BEST_FIRST" "-Dvrp.rccMillis=1000" test
+```
+
+See `BENCHMARKS.md` for all properties and initial observations. Run several trials: ojAlgo's node and cut counts, as
+well as runtime, vary substantially between runs.
 
 ## Why an exact solver, and not heuristic?
 
