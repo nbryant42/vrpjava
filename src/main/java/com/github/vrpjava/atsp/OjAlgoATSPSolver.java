@@ -68,7 +68,7 @@ public class OjAlgoATSPSolver extends ATSPSolver {
 
     private static void addCuts(List<List<Edge>> cycles, ExpressionsBasedModel model, Variable[][] vars) {
         for (var cycle : cycles) {
-            var cut = model.newExpression("cut: " + cycle).level(cycle.size() - 1);
+            var cut = model.newExpression("cut: " + cycle).upper(cycle.size() - 1);
 
             for (var edge : cycle) {
                 cut.set(vars[edge.src()][edge.dest()], ONE);

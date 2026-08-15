@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.TWO;
 import static java.math.BigDecimal.ZERO;
+import static java.math.BigDecimal.valueOf;
 import static java.util.Arrays.deepToString;
 import static com.github.vrpjava.Util.setUpHardware_raptorLake;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,6 +45,72 @@ class OjAlgoATSPSolverTest {
                 .stream().map(Edge::src).toList();
 
         assertEquals(List.of(0, 1, 2, 3), result);
+    }
+
+    @Test
+    void subtourCutsDoNotExcludeTheOptimalTour() {
+        var high = valueOf(100);
+        var costs = new BigDecimal[][]{
+                {ZERO, ZERO, ONE, high},
+                {ZERO, ZERO, high, ONE},
+                {high, ONE, ZERO, ZERO},
+                {ONE, high, ZERO, ZERO}};
+
+        var expected = bruteForceCost(costs);
+        var result = new OjAlgoATSPSolver().solve(costs, 10_000L);
+        assertHamiltonianCycle(costs.length, result);
+        var actual = result.stream()
+                .map(edge -> costs[edge.src()][edge.dest()])
+                .reduce(ZERO, BigDecimal::add);
+
+        assertEquals(valueOf(4), expected); // sanity-check the oracle and the deliberately constructed instance
+        assertEquals(expected, actual);
+    }
+
+    private static void assertHamiltonianCycle(int size, List<Edge> edges) {
+        assertEquals(size, edges.size());
+
+        var sources = new HashSet<Integer>();
+        var destinations = new HashSet<Integer>();
+        for (var i = 0; i < edges.size(); i++) {
+            var edge = edges.get(i);
+            var next = edges.get((i + 1) % edges.size());
+
+            assertEquals(edge.dest(), next.src());
+            sources.add(edge.src());
+            destinations.add(edge.dest());
+        }
+        assertEquals(size, sources.size());
+        assertEquals(size, destinations.size());
+    }
+
+    private static BigDecimal bruteForceCost(BigDecimal[][] costs) {
+        var visited = new boolean[costs.length];
+        visited[0] = true;
+        return bruteForceCost(costs, visited, 0, 1);
+    }
+
+    private static BigDecimal bruteForceCost(BigDecimal[][] costs, boolean[] visited, int previous, int depth) {
+        if (depth == costs.length) {
+            return costs[previous][0];
+        }
+
+        BigDecimal best = null;
+        for (var next = 1; next < costs.length; next++) {
+            if (visited[next]) {
+                continue;
+            }
+
+            visited[next] = true;
+            var remaining = bruteForceCost(costs, visited, next, depth + 1);
+            visited[next] = false;
+            var candidate = costs[previous][next].add(remaining);
+
+            if (best == null || candidate.compareTo(best) < 0) {
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     @Test
