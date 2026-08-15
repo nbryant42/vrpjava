@@ -39,13 +39,16 @@ ATSP uses a full square cost matrix and returns an ordered list of directed `Edg
    component/subtour cuts from `SubtourCuts`.
 5. `Job.run()` queues the root node and registers it with the solver-owned `Scheduler`.
 6. `Scheduler` shares worker threads fairly across jobs. Each `Worker` copies the global model, fixes branch variables,
-   solves and separates the node, then either fathoms it, queues two children, or reports an incumbent.
+   solves and separates the node, then either resolves it, queues one child for every integer value in the selected
+   variable's domain, reports an incumbent, or marks the node incomplete.
 7. `Job` owns the global bound model, incumbent, depth-first/best-first queue, deadline, node counts, and final-state
-   transition. Cuts discovered at nodes may also be propagated to its `GlobalBounds` model.
+   transition. `SearchProgress` permits an optimality claim only when the queue and in-flight work are exhausted and
+   every removed node was proof-complete. Cuts discovered at nodes may also be propagated to `GlobalBounds`.
 
 Supporting classes:
 
 - `Node`: immutable branch decisions, depth, and inherited lower bound.
+- `SearchProgress` / `NodeOutcome`: sticky proof-completeness and in-flight-node bookkeeping.
 - `GlobalBounds`: synchronized root model and lazily refreshed relaxation result.
 - `RccSepCVRPCuts`: exact RCC separation subproblem; uses ojAlgo callback strategies to collect equally strong cuts.
 - `CutCandidates` / `CallbackStrategy`: candidate collection and the reflective ojAlgo integer-strategy adapter.
@@ -77,21 +80,13 @@ Before modifying search or separation, trace both the mathematical result and it
 - An exception must not strand a node in flight or permanently kill a scheduler worker.
 - Deadline handling must terminate loops without presenting a merely feasible result as exact.
 
-## Current handoff (update when resolved)
+## Correctness audit history
 
-The main worktree currently contains three uncommitted, deliberately failing correctness-test changes. Preserve them:
-
-- `ATSPSolverTest`: rejected provisional nearest-neighbor candidates must not be marked visited.
-- `OjAlgoATSPSolverTest`: eliminating an incumbent subtour must not exclude the true Hamiltonian optimum.
-- `OjAlgoCVRPSolverOracleTest`: six tiny brute-force oracle cases plus a lower-bound-equals-incumbent proof case.
-
-The intended green commit sequence is:
-
-1. Pair the nearest-neighbor regression with moving the visited mutation after final destination selection.
-2. Pair the ATSP regression with changing the incumbent-subtour equality cut to an upper-bound cut.
-3. Pair the CVRP oracle/proof regressions with explicit search-proof-completeness handling. Do not implement this as an
-   unconditional `HEURISTIC`-to-`OPTIMAL` promotion when the queue empties; unresolved/timed-out nodes must prevent an
-   optimality claim.
+The initial audit produced deterministic regressions for ATSP nearest-neighbor visitation, ATSP subtour-cut direction,
+and CVRP proof status. The two ATSP fixes are commits `f0b70d5` and `e157d42`. CVRP coverage includes six tiny
+brute-force oracle cases, a lower-bound-equals-incumbent proof case, direct capacity-cut validation, full-domain integer
+branching, and deterministic search-completion state tests. Preserve those checks when changing solver mathematics,
+timeouts, or concurrency.
 
 Historical work recovered from the old dirty worktree is committed and pushed on `wip/recovered-rcc-comb`; treat it as
 an archival experiment rather than merging it wholesale:

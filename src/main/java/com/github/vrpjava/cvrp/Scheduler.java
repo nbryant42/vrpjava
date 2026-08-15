@@ -6,16 +6,27 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
+
+@FunctionalInterface
+interface NodeProcessor {
+    NodeOutcome process(Job job, Node node);
+}
 
 class Scheduler implements AutoCloseable {
     @GuardedBy("jobs")
     private boolean shuttingDown = false;
     private final List<Job> jobs = new ArrayList<>();
     private final List<Thread> threads;
-    private final Worker worker = new Worker(this);
+    private final NodeProcessor nodeProcessor;
 
     Scheduler() {
+        this(processor -> processor);
+    }
+
+    Scheduler(UnaryOperator<NodeProcessor> decorator) {
+        nodeProcessor = decorator.apply(new Worker(this)::process);
         var threadFactory = Thread.ofPlatform().name("ojAlgoCVRPSolver-", 1).factory();
 
         threads = IntStream.range(0, Runtime.getRuntime().availableProcessors()).mapToObj(i ->
@@ -38,13 +49,25 @@ class Scheduler implements AutoCloseable {
                             }
                             job = optional.get();
                             node = job.nextNode();
+                            if (node == null) {
+                                continue;
+                            }
                         }
 
                         // just using real time instead of thread CPU time to avoid MxBean complexity
                         // and because much of the work happens in other threads (ojAlgo's thread pool)
                         var start = System.nanoTime();
-                        worker.process(job, node);
-                        job.nodeComplete(System.nanoTime() - start);
+                        var outcome = NodeOutcome.INCOMPLETE;
+                        try {
+                            outcome = nodeProcessor.process(job, node);
+                        } catch (RuntimeException | Error failure) {
+                            job.reportFailure(failure);
+                            if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
+                                throw failure;
+                            }
+                        } finally {
+                            job.nodeComplete(System.nanoTime() - start, outcome);
+                        }
                     }
                 })
         ).toList();

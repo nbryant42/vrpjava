@@ -55,8 +55,9 @@ Look under Project Reports.
 
 The algorithm first iterates on the RCC-Sep procedure (which is itself NP-hard) until it's no longer possible to
 generate additional cuts. Then it proceeds with a parallel, best-first branch-and-cut search, but the strategy for the
-non-root nodes is different from the root node; here, it mostly avoids the RCC-Sep procedure, only using the RCC-Sep
-procedure when we have an integer solution that is known to violate one or more capacity constraints.
+non-root nodes is different from the root node. Here, it uses inexpensive connected-component cuts and derives a
+rounded-capacity cut directly from any integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved
+for tightening the root relaxation.
 
 There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the
 hardest problem instances, we may not be able to solve to optimality, so the goal would be to merely generate an

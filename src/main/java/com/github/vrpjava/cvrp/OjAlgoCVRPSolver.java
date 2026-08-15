@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -48,13 +49,18 @@ import static java.util.stream.Collectors.toSet;
  * @see <a href="https://onlinelibrary.wiley.com/doi/10.1002/net.22183">The RCC-Sep paper</a>
  */
 public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
-    private final Scheduler scheduler = new Scheduler();
+    private final Scheduler scheduler;
     private boolean debug;
 
     /**
      * Default constructor.
      */
     public OjAlgoCVRPSolver() {
+        scheduler = new Scheduler();
+    }
+
+    OjAlgoCVRPSolver(UnaryOperator<NodeProcessor> processorDecorator) {
+        scheduler = new Scheduler(processorDecorator);
     }
 
     private double bestFirstRatio = 0.85;

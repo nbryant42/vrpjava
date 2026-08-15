@@ -5,48 +5,60 @@ import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import static com.github.vrpjava.cvrp.Job.addCuts;
+import static com.github.vrpjava.cvrp.CVRPSolver.minVehicles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Comparator.comparing;
 import static java.util.Map.Entry.comparingByValue;
+import static java.util.stream.Collectors.toSet;
+import static org.ojalgo.optimisation.Optimisation.State.INFEASIBLE;
 
 /**
- * Multithreading is not implemented yet, but when it is, this class will contain all the worker-thread logic.
+ * Node-processing logic executed by {@link Scheduler} worker threads.
  */
 final class Worker {
-    private static final MathContext TEN_DIGIT_PRECISION = new MathContext(10, RoundingMode.HALF_EVEN);
+    private static final int NUMERICAL_GUARD_DIGITS = 6;
     private final Scheduler scheduler;
 
     Worker(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
-    void process(Job job, Node node) {
+    NodeOutcome process(Job job, Node node) {
         // double-check the parent node's bound before we go any further; the best-known solution may have
         // improved since it was queued.
         if (node.bound() >= job.getBestKnown()) {
-            return; // fathom the node.
+            return NodeOutcome.RESOLVED; // fathom the node.
         }
         var nodeModel = job.copyGlobalBoundsModel();
         node.vars().forEach((k, v) -> nodeModel.getVariable(k).level(v));
 
-        var nodeResult = weakUpdateBounds(job, nodeModel);
-        var nodeBound = roundBound(nodeResult.getValue(), job.maxScale());
+        var evaluation = weakUpdateBounds(job, nodeModel);
+        var nodeResult = evaluation.result();
 
-        // if it's not optimal, it's probably INFEASIBLE (with nonsense variables), or a timeout.
-        if (!nodeResult.getState().isOptimal() || nodeBound >= job.getBestKnown()) {
-            return; // fathom the node.
+        if (nodeResult.getState() == INFEASIBLE) {
+            return NodeOutcome.RESOLVED;
+        }
+        if (!nodeResult.getState().isOptimal() || !evaluation.complete()) {
+            return NodeOutcome.INCOMPLETE;
+        }
+
+        var nodeBound = roundBound(nodeResult.getValue(), job.maxScale());
+        if (nodeBound >= job.getBestKnown()) {
+            return NodeOutcome.RESOLVED;
         }
 
         var stream = IntStream.range(0, (int) nodeResult.count())
@@ -77,10 +89,28 @@ final class Worker {
             var k = optional.get().getKey();
             var v = nodeResult.get(k);
             var closest = v.setScale(0, RoundingMode.HALF_EVEN);
-            var other = closest.compareTo(v) > 0 ? closest.subtract(ONE) : closest.add(ONE);
+            var variable = nodeModel.getVariable(k);
+            var values = branchValues(variable.getLowerLimit(), variable.getUpperLimit());
 
-            // Queue two child nodes with the decision variable fixed to `closest` and `other`.
-            // Also, queue the closest gap last, so it's on top of stack (if it's a LIFO queue.)
+            values.sort((left, right) -> {
+                var byDistance = right.subtract(v).abs().compareTo(left.subtract(v).abs());
+                if (byDistance != 0) {
+                    return byDistance;
+                }
+                var byPreference = Boolean.compare(left.equals(closest), right.equals(closest));
+                if (byPreference != 0) {
+                    return byPreference;
+                }
+                return left.compareTo(right);
+            });
+
+            if (values.size() < 2) {
+                return NodeOutcome.INCOMPLETE;
+            }
+
+            // Queue one child for every integer in the variable's domain. Depot-edge variables have domain
+            // {0, 1, 2}, so a two-way exact-value split would not cover the complete search space.
+            // Queue the closest value last, so it's on top of the stack (if it's a LIFO queue.)
             //
             // This is a bit subtle, and warrants some discussion: this ordering only seems to affect the algorithm
             // performance when we are in depth-first mode. It's a bit hard to tell; the signal-to-noise ratio is bad,
@@ -90,21 +120,42 @@ final class Worker {
             // especially in the LP relaxation.)
             //
             // When we're in best-first mode, we sort by the lower bound, rather than the fractional rounding gap; the
-            // ordering of these two nodes does not affect that, but it does affect depth-first mode.
-            scheduler.queueNodes(job, new Node(node, nodeBound, k, other), new Node(node, nodeBound, k, closest));
+            // ordering of these child nodes does not affect that, but it does affect depth-first mode.
+            scheduler.queueNodes(job, values.stream()
+                    .map(value -> new Node(node, nodeBound, k, value))
+                    .toArray(Node[]::new));
         } else {
             job.reportSolution(nodeResult);
         }
+        return NodeOutcome.RESOLVED;
+    }
+
+    static List<BigDecimal> branchValues(BigDecimal lower, BigDecimal upper) {
+        var values = new ArrayList<BigDecimal>();
+        for (var value = lower.setScale(0, RoundingMode.CEILING);
+             value.compareTo(upper) <= 0;
+             value = value.add(ONE)) {
+            values.add(value);
+        }
+        if (values.isEmpty()) {
+            throw new IllegalArgumentException("Integer variable has an empty domain: [" + lower + ", " + upper + "]");
+        }
+        return values;
     }
 
     /**
      * If all costs are integer, the bound can be tightened by rounding up to the nearest integer.
      * (We generalize this to any level of precision.)
      * <p>
-     * Note that first we round to 10-digit precision, to control for numerical instability.
+     * First round downward at a scale finer than the objective lattice, to prevent small positive solver noise from
+     * raising the bound by a full objective unit. The downward step is conservative and does not discard significant
+     * integer digits for large objectives.
      */
     static double roundBound(double lb, int scale) {
-        return BigDecimal.valueOf(lb).round(TEN_DIGIT_PRECISION).setScale(scale, RoundingMode.CEILING).doubleValue();
+        return BigDecimal.valueOf(lb)
+                .setScale(scale + NUMERICAL_GUARD_DIGITS, RoundingMode.FLOOR)
+                .setScale(scale, RoundingMode.CEILING)
+                .doubleValue();
     }
 
     static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
@@ -140,9 +191,9 @@ final class Worker {
     /**
      * Update the bounds model, when called from a search node. This is similar to
      * {@link #updateBounds(BigDecimal, BigDecimal[], ExpressionsBasedModel, Job, long)},
-     * but avoids solving the NP-hard RCC-Sep model unless we have an invalid integer solution.
+     * but uses directly derived capacity cuts to reject invalid integer routes without solving another ILP.
      */
-    private static Optimisation.Result weakUpdateBounds(Job job, ExpressionsBasedModel model) {
+    private static NodeEvaluation weakUpdateBounds(Job job, ExpressionsBasedModel model) {
         var result = minimize(model, job.deadline());
         var cuts = new HashSet<Set<Integer>>();
 
@@ -154,31 +205,73 @@ final class Worker {
                 continue;
             }
 
-            // No more cuts to add. Done?
-            // If there are no fractional variables, this is a candidate solution, but we don't know for sure until
-            // we've validated that it satisfies the full set of constraints, so iterate on additional cuts.
-            // This needs to be done on a fast path, so don't run the RCC-Sep ILP model unless confirmed invalid.
-            if (isInvalidIntegerSolution(job, result)) {
-                var rccCuts = RccSepCVRPCuts.generate(job.vehicleCapacity(), job.demands(), result,
-                        job.deadline());
+            // If there are no fractional variables, validate the complete route structure and capacities before
+            // accepting the candidate. An over-capacity route directly supplies a valid rounded-capacity cut.
+            if (isIntegerSolution(result)) {
+                var cycles = findCycles(job.demands().length, result);
 
-                if (rccCuts != null && job.addCuts(rccCuts, cuts, model, result) > 0) {
-                    result = minimize(model, job.deadline());
-                    continue;
+                if (!isValidIntegerSolution(job.vehicleCapacity(), job.demands(), cycles)) {
+                    var capacityCuts = capacityCuts(job.vehicleCapacity(), job.demands(), cycles);
+
+                    if (job.addCuts(capacityCuts, cuts, model, result) > 0) {
+                        result = minimize(model, job.deadline());
+                        continue;
+                    }
+
+                    // The candidate is known to be invalid, but no new valid cut was installed. Do not report it as
+                    // a solution or treat this node as proof-complete.
+                    return new NodeEvaluation(result, false);
                 }
             }
-            return result;
+            return new NodeEvaluation(result, true);
         }
 
-        return result; // infeasible or timed out.
+        return new NodeEvaluation(result, false); // infeasible or incomplete; process() distinguishes the state.
     }
 
-    // Warning -- this does not check for sub-tours -- that's assumed to be handled elsewhere.
-    private static boolean isInvalidIntegerSolution(Job job, Optimisation.Result result) {
-        return isIntegerSolution(result) && findCycles(job.demands().length, result).stream().anyMatch(cycle ->
-                cycle.stream().map(i -> job.demands()[i])
-                        .reduce(ZERO, BigDecimal::add)
-                        .compareTo(job.vehicleCapacity()) > 0);
+    static Set<Cut> capacityCuts(BigDecimal vehicleCapacity,
+                                 BigDecimal[] demands,
+                                 Collection<List<Integer>> cycles) {
+        var result = new HashSet<Cut>();
+
+        for (var cycle : cycles) {
+            var subset = cycle.stream().filter(node -> node != 0).collect(toSet());
+            var totalDemand = subset.stream().map(node -> demands[node]).reduce(ZERO, BigDecimal::add);
+            var requiredVehicles = minVehicles(vehicleCapacity, totalDemand);
+
+            if (requiredVehicles > 1) {
+                result.add(new Cut(requiredVehicles, subset));
+            }
+        }
+        return result;
+    }
+
+    static boolean isValidIntegerSolution(BigDecimal vehicleCapacity,
+                                          BigDecimal[] demands,
+                                          Collection<List<Integer>> cycles) {
+        var remaining = IntStream.range(1, demands.length).boxed().collect(toSet());
+
+        for (var cycle : cycles) {
+            if (cycle.size() < 2 || cycle.getFirst() != 0) {
+                return false;
+            }
+
+            var totalDemand = ZERO;
+            for (var i = 1; i < cycle.size(); i++) {
+                var customer = cycle.get(i);
+                if (customer <= 0 || customer >= demands.length || !remaining.remove(customer)) {
+                    return false;
+                }
+                totalDemand = totalDemand.add(demands[customer]);
+            }
+            if (totalDemand.compareTo(vehicleCapacity) > 0) {
+                return false;
+            }
+        }
+        return remaining.isEmpty();
+    }
+
+    private record NodeEvaluation(Optimisation.Result result, boolean complete) {
     }
 
     private static boolean isIntegerSolution(Optimisation.Result result) {

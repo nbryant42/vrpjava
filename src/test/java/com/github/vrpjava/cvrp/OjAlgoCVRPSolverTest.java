@@ -533,8 +533,17 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
     @Test
     void roundBound() {
-        // This case looks like numerical instability, so round to 10-digit precision before taking the ceiling.
+        // Suppress numerical noise at a scale finer than the objective lattice before taking the ceiling.
         assertEquals(1132.0, Worker.roundBound(1132.000000148, 0));
         assertEquals(1132.0, Worker.roundBound(1131.999999904, 0));
+        assertEquals(13.0, Worker.roundBound(12.25, 0));
+        assertEquals(12_345_678_956.0, Worker.roundBound(12_345_678_956.0, 0));
+
+        var lowerBound = BigDecimal.valueOf(835.227782375);
+        var directLatticeCeiling = lowerBound.setScale(8, RoundingMode.CEILING);
+        var roundedBound = BigDecimal.valueOf(Worker.roundBound(lowerBound.doubleValue(), 8));
+
+        assertTrue(roundedBound.compareTo(directLatticeCeiling) <= 0);
+        assertEquals(directLatticeCeiling, roundedBound);
     }
 }

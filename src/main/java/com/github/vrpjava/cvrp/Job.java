@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.vrpjava.Util.newModel;
@@ -25,6 +24,7 @@ import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.getVariable_noFlip;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.toSeconds;
 import static com.github.vrpjava.cvrp.SubtourCuts.formatCut;
+import static com.github.vrpjava.cvrp.Worker.roundBound;
 import static com.github.vrpjava.cvrp.Worker.updateBounds;
 import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Math.max;
@@ -51,16 +51,23 @@ class Job {
     private final int maxScale;
     @GuardedBy("this")
     private boolean done;
+    @GuardedBy("this")
+    private boolean finalized;
     private volatile double bestKnown;
 
     @GuardedBy("this")
     private volatile Queue<Node> queue;
+    @GuardedBy("this")
     private Result.State state;
+    @GuardedBy("this")
     private Optimisation.Result incumbent;
     @GuardedBy("this")
+    private Throwable failure;
+    @GuardedBy("this")
     private int nodes;
+    @GuardedBy("this")
+    private final SearchProgress searchProgress = new SearchProgress();
     private final AtomicLong totalTime = new AtomicLong();
-    private final AtomicInteger nodesInFlight = new AtomicInteger();
 
     Job(OjAlgoCVRPSolver solver, int minVehicles, BigDecimal vehicleCapacity,
         BigDecimal[] demands, BigDecimal[][] costMatrix, long timeout) {
@@ -194,15 +201,17 @@ class Job {
                 var myState = globalBoundsResult.getState() == INFEASIBLE ? Result.State.INFEASIBLE :
                         Result.State.UNEXPLORED;
 
-                return buildResult(myState, null, 0);
+                return buildResult(myState, null, 0, bestKnown);
             }
         } else {
             bestKnown = kickstarter.objective();
 
             if (!globalBoundsResult.getState().isOptimal()) {
-                return buildResult(Result.State.HEURISTIC, null, 0);
+                return buildResult(Result.State.HEURISTIC, null, 0, bestKnown);
             }
         }
+
+        var globalBound = roundBound(globalBoundsResult.getValue(), maxScale);
 
         // queue of pending nodes for branch-and-bound search. Each node is represented as a Map
         // of variable IDs and values to be fixed in the model.
@@ -211,11 +220,11 @@ class Job {
         // to proceed directly to the better solutions, but will explore more internal nodes before it gets there. We
         // switch strategies based on the problem at hand, so don't assume this will always be a LIFO queue.
         queue = Collections.asLifoQueue(new ArrayDeque<>());
-        solver.debug(evaluateStrategy(globalBoundsResult.getValue(), bestKnown, start, "Initial"));
+        solver.debug(evaluateStrategy(globalBound, bestKnown, start, "Initial"));
         state = kickstarter.state();
 
         // the root node has no variables fixed.
-        queue.add(new Node(0, globalBoundsResult.getValue(), Map.of()));
+        queue.add(new Node(0, globalBound, Map.of()));
         solver.register(this);
 
         synchronized (this) {
@@ -231,27 +240,37 @@ class Job {
             }
         }
 
+        JobSnapshot snapshot;
+        synchronized (this) {
+            finalized = true;
+            snapshot = new JobSnapshot(state, incumbent, nodes, bestKnown, failure);
+        }
         solver.deregister(this);
-        return buildResult(state, incumbent, nodes);
+
+        if (snapshot.failure() != null) {
+            throw new IllegalStateException("CVRP worker failed.", snapshot.failure());
+        }
+        return buildResult(snapshot.state(), snapshot.incumbent(), snapshot.nodes(), snapshot.objective());
     }
 
     void reportSolution(Optimisation.Result nodeResult) {
         var globalBoundsResult = globalBounds.getResult(deadline);
-        var lb = globalBoundsResult.getValue();
+        var boundIsProven = globalBoundsResult.getState().isOptimal();
+        var lb = boundIsProven ? roundBound(globalBoundsResult.getValue(), maxScale) : Double.NaN;
         var ub = nodeResult.getValue();
         String msg = null;
 
         synchronized (this) {
-            if (ub < bestKnown) {
-                msg = evaluateStrategy(lb, ub, start, "New");
+            if (!finalized && ub < bestKnown) {
+                msg = boundIsProven ? evaluateStrategy(lb, ub, start, "New") :
+                        "[" + toSeconds(System.currentTimeMillis() - start) + "s]: New feasible solution; " +
+                                "global bound state is " + globalBoundsResult.getState() + ".";
                 incumbent = nodeResult;
                 bestKnown = ub;
                 state = Result.State.FEASIBLE;
 
-                if (ub <= lb) {
+                if (canProveOptimal(globalBoundsResult.getState(), lb, ub)) {
                     state = Result.State.OPTIMAL;
-                    setDone();
-                } else if (!globalBoundsResult.getState().isOptimal()) {
                     setDone();
                 }
             }
@@ -267,7 +286,7 @@ class Job {
         notifyAll();
     }
 
-    private Result buildResult(Result.State myState, Optimisation.Result incumbent, int nodes) {
+    private Result buildResult(Result.State myState, Optimisation.Result incumbent, int nodes, double objective) {
         var cycles = incumbent == null ? kickstarter.cycles() : findCycles(demands.length, incumbent);
 
         solver.debug(nodes + " nodes, " + cycles.size() + " cycles: " + cycles);
@@ -277,7 +296,14 @@ class Job {
         solver.debug("Cycle demands: " + cycleDemands);
         solver.debug("Currently " + countCuts() + " cuts.");
 
-        return new Result(myState, bestKnown, cycles);
+        return new Result(myState, objective, cycles);
+    }
+
+    private record JobSnapshot(Result.State state,
+                               Optimisation.Result incumbent,
+                               int nodes,
+                               double objective,
+                               Throwable failure) {
     }
 
     private long countCuts() {
@@ -287,7 +313,9 @@ class Job {
     }
 
     synchronized void queueNode(Node node) {
-        queue.add(node);
+        if (!done && !finalized) {
+            queue.add(node);
+        }
     }
 
     /**
@@ -364,11 +392,14 @@ class Job {
     }
 
     synchronized boolean hasWork() {
-        return !queue.isEmpty();
+        return !done && !finalized && !queue.isEmpty();
     }
 
     synchronized Node nextNode() {
-        nodesInFlight.getAndIncrement();
+        if (done || finalized || queue.isEmpty()) {
+            return null;
+        }
+        searchProgress.nodeStarted();
         nodes++;
         return queue.remove();
     }
@@ -386,17 +417,24 @@ class Job {
      * <p>
      * Also decrements an internal counter of nodes in flight, and if the queue is empty, handles the completion logic.
      */
-    void nodeComplete(long elapsedTime) {
+    synchronized void nodeComplete(long elapsedTime, NodeOutcome outcome) {
         totalTime.getAndAdd(elapsedTime);
-        if (nodesInFlight.decrementAndGet() <= 0) {
-            synchronized (this) {
-                if (queue.isEmpty()) {
-                    if (state == Result.State.FEASIBLE) {
-                        state = Result.State.OPTIMAL;
-                    }
-                    setDone();
-                }
-            }
+        var completion = searchProgress.nodeFinished(outcome, !queue.isEmpty());
+
+        if (!done && !finalized && completion.exhausted()) {
+            state = completion.resultState(state);
+            setDone();
         }
+    }
+
+    synchronized void reportFailure(Throwable cause) {
+        if (!done && !finalized) {
+            failure = cause;
+            setDone();
+        }
+    }
+
+    static boolean canProveOptimal(Optimisation.State boundState, double lowerBound, double incumbent) {
+        return boundState.isOptimal() && incumbent <= lowerBound;
     }
 }
