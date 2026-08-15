@@ -46,7 +46,6 @@ public abstract class ATSPSolver {
                     if ((min == null || cost.compareTo(min) < 0) && !visited.contains(tmp)) {
                         min = cost;
                         dest = tmp;
-                        visited.add(dest);
                     }
                 }
             }
@@ -55,6 +54,7 @@ public abstract class ATSPSolver {
             if (dest == 0) {
                 break;
             }
+            visited.add(dest);
             src = dest;
         }
         return result;
