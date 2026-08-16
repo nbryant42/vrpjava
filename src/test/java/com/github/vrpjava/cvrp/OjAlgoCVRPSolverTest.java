@@ -477,32 +477,63 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     }
 
     // I think this is probably the same as the P-n76-k4 from Lysgaard et al.
-    // They report root bound 589.097, we get a worse bound and time out:
-    // [22.940s]: Switching to best-first search. Bounds now 586.0/646.0 (90.71%); 87 cuts, 0 nodes. Next node has bound null
-    // [1186.481s]: New solution. Bounds now 586.0/594.0 (98.65%); 614 cuts, 6440 nodes. Next node has bound 591.0
-    // 9076 nodes, 4 cycles: [[0, 4, 45, 29, 48, 47, 36, 69, 71, 60, 70, 20, 37, 5, 15, 57, 54, 13, 27, 52, 34, 67], [0, 17, 40, 3, 44, 32, 9, 39, 31, 55, 25, 50, 18, 24, 49, 56, 23, 63, 16, 51], [0, 6, 33, 73, 1, 43, 41, 42, 64, 22, 62, 28, 61, 21, 74, 30, 2, 68, 75], [0, 26, 12, 72, 58, 10, 38, 65, 11, 66, 59, 14, 53, 7, 35, 19, 8, 46]]
-    // Cycle demands: [342, 341, 332, 349]
-    // Currently 707 cuts.
-    // Total elapsed: 1800088 ms
-    //
-    // org.opentest4j.AssertionFailedError:
-    // Expected :593.0
-    // Actual   :594.0
-    //
-    // Best time so far to find a 594 solution was 732.009s
+    // They report root bound 589.097, we get a worse bound and time out, but we're sometimes able to find the published
+    // optimum (just not prove its optimality within the 30-minute timeout):
+    //[20.781s]: Switching to best-first search. Bounds now 586.0/646.0 (90.71%); 91 cuts, 0 nodes. Next node has bound null
+    //[45.830s]: Found bound 587.0 at depth 5
+    //[51.858s]: Found bound 591.0 at depth 5
+    //[77.675s]: Found bound 590.0 at depth 5
+    //[78.097s]: Found bound 588.0 at depth 5
+    //[87.864s]: Found bound 588.0 at depth 5
+    //[107.016s]: Found bound 587.0 at depth 5
+    //[122.079s]: Found bound 611.0 at depth 5
+    //[131.064s]: Found bound 590.0 at depth 5
+    //[131.971s]: Found bound 588.0 at depth 5
+    //[141.258s]: Found bound 611.0 at depth 5
+    //[142.521s]: Found bound 589.0 at depth 5
+    //[142.634s]: Found bound 590.0 at depth 5
+    //[154.579s]: Found bound 589.0 at depth 5
+    //[154.802s]: Found bound 588.0 at depth 5
+    //[155.567s]: Found bound 594.0 at depth 5
+    //[155.705s]: Found bound 588.0 at depth 5
+    //[164.214s]: Found bound 589.0 at depth 5
+    //[169.875s]: Found bound 609.0 at depth 5
+    //[175.864s]: Found bound 589.0 at depth 5
+    //[176.964s]: Found bound 589.0 at depth 5
+    //[179.711s]: Found bound 608.0 at depth 5
+    //[182.253s]: Found bound 590.0 at depth 5
+    //[192.594s]: Found bound 588.0 at depth 5
+    //[207.492s]: Found bound 606.0 at depth 5
+    //[222.612s]: Found bound 591.0 at depth 5
+    //[257.976s]: Found bound 605.0 at depth 5
+    //[266.160s]: Found bound 588.0 at depth 5
+    //[357.524s]: Found bound 590.0 at depth 5
+    //[384.256s]: Found bound 590.0 at depth 5
+    //[436.245s]: Found bound 610.0 at depth 5
+    //[449.550s]: Found bound 612.0 at depth 5
+    //[453.779s]: Found bound 591.0 at depth 5
+    //[654.451s]: Found bound 611.0 at depth 5
+    //[944.873s]: New solution. Bounds now 586.0/593.0 (98.82%); 1025 cuts, 1063 nodes. Next node has bound 591.0
+    //[1603.406s]: Found bound 594.0 at depth 5
+    //[1636.936s]: Found bound 594.0 at depth 5
+    //[1658.438s]: Found bound 594.0 at depth 5
+    //[1734.761s]: Found bound 597.0 at depth 5
+    //2293 nodes, 4 cycles: [[0, 17, 40, 12, 72, 58, 10, 38, 65, 66, 11, 59, 14, 53, 35, 7, 26], [0, 4, 30, 48, 21, 61, 22, 64, 42, 41, 43, 1, 73, 62, 28, 74, 2, 68, 75], [0, 6, 33, 63, 23, 56, 49, 24, 18, 50, 25, 55, 31, 39, 9, 32, 44, 3, 16, 51], [0, 34, 52, 27, 45, 29, 5, 47, 36, 69, 71, 60, 70, 20, 37, 15, 57, 13, 54, 19, 8, 46, 67]]
+    //Cycle demands: [344, 336, 334, 350]
+    //Currently 1089 cuts.
     @Test
     @Disabled
     void eilD76_k4() throws IOException {
         var timeout = 1800_000L;
 
         try (var solver = newSolver()) {
-            solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 4,
+            solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 5,
                     5, Long.MAX_VALUE, 0.85, 60_000L));
 
             var result = doTestEilD76(solver, timeout, 360);
 
-            //assertEquals(OPTIMAL, result.state());
             assertEquals(593.0, result.objective());
+            assertEquals(OPTIMAL, result.state());
         }
     }
 
