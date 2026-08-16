@@ -38,8 +38,8 @@ ATSP uses a full square cost matrix and returns an ordered list of directed `Edg
 1. `CVRPSolver.solve(...)` validates the problem and raises `minVehicles` to the simple capacity lower bound.
 2. `OjAlgoCVRPSolver.doSolve(...)` creates a `Job`.
 3. `Job` obtains a heuristic incumbent, builds the relaxed two-index vehicle-flow model, and tightens the root bound.
-4. `Worker.updateBounds(...)` alternates ojAlgo solves with rounded-capacity cuts from `RccSepCVRPCuts` and connected-
-   component/subtour cuts from `SubtourCuts`.
+4. `Worker.updateBounds(...)` alternates ojAlgo solves with rounded-capacity cuts from `RccSepCVRPCuts` and cheaper
+   connectivity cuts from `SubtourCuts`.
 5. `Job.run()` queues the root node and registers it with the solver-owned `Scheduler`.
 6. `Scheduler` shares worker threads fairly across jobs. Each `Worker` copies the global model, fixes branch variables,
    solves and separates the node, then either resolves it, queues one child for every integer value in the selected
@@ -55,7 +55,11 @@ Supporting classes:
 - `GlobalBounds`: synchronized root model and lazily refreshed relaxation result.
 - `RccSepCVRPCuts`: exact RCC separation subproblem; uses ojAlgo callback strategies to collect equally strong cuts.
 - `CutCandidates` / `CallbackStrategy`: candidate collection and the reflective ojAlgo integer-strategy adapter.
-- `SubtourCuts`: cheaper cuts derived from disconnected fractional components.
+- `SubtourCuts`: returns all disconnected-component cuts first; when the support graph is connected, it uses
+  `StoerWagnerMinimumCut` to find one exact global minimum cut and strengthens the discovered subset with its actual
+  rounded-capacity requirement.
+- `StoerWagnerMinimumCut`: package-private, dependency-free `O(|V|^3)` global minimum cut for nonnegative undirected
+  `BigDecimal` graphs.
 - `Util`: matrix validation, model/deadline setup, variable construction, cost lookup, and optional hardware tuning.
 
 ## Tests
@@ -64,6 +68,8 @@ Supporting classes:
 - `src/test/java/com/github/vrpjava/cvrp/AbstractCVRPSolverTest.java`: shared heuristic contract tests.
 - `src/test/java/com/github/vrpjava/cvrp/OjAlgoCVRPSolverTest.java`: exact-solver examples, timeout behavior, helpers,
   disabled larger examples, and opt-in property-driven `eil33`/`eil51` benchmark harnesses.
+- `SubtourCutsTest` covers component precedence, connected fractional bottlenecks, and demand strengthening;
+  `StoerWagnerMinimumCutTest` compares the separator with exhaustive cuts on 175 deterministic tiny graphs.
 - `BENCHMARKS.md`: benchmark properties, methodology cautions, and dated experimental observations.
 - `src/test/resources/com/github/vrpjava/large-problem.json`: larger fixture used by solver tests.
 
@@ -92,15 +98,23 @@ brute-force oracle cases, a lower-bound-equals-incumbent proof case, direct capa
 branching, and deterministic search-completion state tests. Preserve those checks when changing solver mathematics,
 timeouts, or concurrency.
 
-Historical work recovered from the old dirty worktree is committed and pushed on `wip/recovered-rcc-comb`; treat it as
-an archival experiment rather than merging it wholesale:
+The useful parts of the historical `wip/recovered-rcc-comb` branch have been rebased, reduced to documentation, and
+merged into `main`. Its earlier RCC-depth, fixed-timeout, scheduler, and search-threshold experiments were dropped;
+`ExperimentalParameters` and `BENCHMARKS.md` now provide proof-safe versions of those controls and measurements.
 
-- `1b5807c` preserves the comb-inequality draft and the original depth-one RCC experiment.
-- `65984cd` extends full RCC separation through depths 1-3, caps each RCC solve at 15 seconds, changes a search
-  threshold, and appends caveats/next steps to `CombInequalities.md`.
-- Its timeout path can consume a non-optimal RCC result, so it is not proof-safe as written.
-- No comb separator was implemented. For fixed `t = 2`, the draft's parity observation is sound; variable tooth count
-  requires `sum(alpha) + 3t = 2 beta + 1`. Before implementation, finish the membership/domain constraints, clarify
-  full tooth disjointness, linearize the boundary objective, and validate generated cuts exhaustively on tiny cases.
+`CombInequalities.md` preserves the unfinished two-tooth derivation exactly as recovered. `CombInequalitiesV2.md`
+finishes the algebra and records the resulting design decision:
+
+- With `k(S) = ceil(q(S) / Q)` and depot-free teeth, every fixed-two-tooth comb is dominated by the ordinary rounded-
+  capacity inequalities for its handle and two teeth. Do not implement the original two-tooth separator.
+- `SubtourCuts` now also detects a connected fractional bottleneck with boundary value below 2 through exact global
+  minimum cut. It strengthens the discovered subset with its actual `k(S)`, complementing rather than narrowing the
+  `k >= 2` RCC-Sep MILP.
+- The smallest potentially non-redundant rounded-capacity case has three teeth, all three split-rounding terms active,
+  and `k(H) = 1`. The narrowest experiment is an ordinary three-tooth 2-matching inequality with disjoint two-customer
+  teeth.
+- Padberg-Rao separation covers the full 2-matching family in polynomial time. A fixed-three-tooth ojAlgo MILP is
+  easier to prototype but should remain experimental and be checked against an exhaustive tiny-instance oracle before
+  root-bound and runtime benchmarks on EIL51.
 
 The remote `cutPooling` branch is another explicitly experimental line and is not part of `main`.

@@ -328,6 +328,14 @@ class Job {
         return result;
     }
 
+    long getStart() {
+        return start;
+    }
+
+    ExperimentalParameters getParameters() {
+        return parameters;
+    }
+
     private record JobSnapshot(Result.State state,
                                Optimisation.Result incumbent,
                                int nodes,

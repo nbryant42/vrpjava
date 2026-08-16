@@ -115,15 +115,16 @@ because $H\ne\varnothing$ gives $k(H)\ge1$. Thus every fixed-two-tooth $k$-comb 
 RCIs.
 
 This matters even though the current implementation does not explicitly store every RCI. When its subproblem finishes,
-`RccSepCVRPCuts` is designed to separate the $k\ge2$ cases exactly, while `SubtourCuts` finds disconnected $k=1$
-cases but is not a full minimum-cut separator. If a two-tooth comb were violated, the direct response would be to
-separate the violated member of
+`RccSepCVRPCuts` is designed to separate the $k\ge2$ cases exactly. `SubtourCuts` covers the $k=1$ connectivity case:
+it first returns every disconnected component, then uses an exact Stoer-Wagner global minimum cut when the support
+graph is connected. If a two-tooth comb were violated, the direct response would be to separate the violated member of
 
 $$
 \{\delta(H)\ge2k(H),\ \delta(T_1)\ge2k(T_1),\ \delta(T_2)\ge2k(T_2)\},
 $$
 
-including an exact minimum-cut routine for the $k=1$ case if necessary. That would be cheaper and at least as strong.
+The discovered subset is strengthened with its actual $k(S)$, so this is cheaper and at least as strong as separating
+the two-tooth comb.
 
 ## The smallest non-redundant case
 
@@ -283,15 +284,15 @@ symmetry.
 
 ## Verification and next steps
 
-If comb separation is pursued, the safe order is:
+One prerequisite is now complete: `SubtourCuts` uses exact global minimum cut to close the connected $k=1$ gap. If
+comb separation is pursued, the remaining safe order is:
 
 1. Add a pure evaluator for (7)/(9), plus an exhaustive tiny-instance oracle over handles and three-edge matchings.
 2. Validate every generated inequality against every feasible CVRP solution on tiny instances.
 3. Compare the MILP optimum with the exhaustive separation optimum on tiny fractional degree-feasible points.
-4. Add an exact minimum-cut separator for $k=1$ RCIs before attributing any gain to comb cuts.
-5. Run the separator only at the root, behind an experimental parameter and a strict time budget. A timed-out separator
+4. Run the separator only at the root, behind an experimental parameter and a strict time budget. A timed-out separator
    may contribute validated feasible incumbent cuts, but failure to finish must never affect proof completeness.
-6. Benchmark root bound, total nodes, cuts, and runtime. The paper reports no comb-bound improvement for EIL33 but does
+5. Benchmark root bound, total nodes, cuts, and runtime. The paper reports no comb-bound improvement for EIL33 but does
    report one for EIL51, so EIL51 is the more plausible initial target.
 
 The original fixed-two-tooth MILP should not be implemented. If the three-tooth 2-matching experiment shows no useful

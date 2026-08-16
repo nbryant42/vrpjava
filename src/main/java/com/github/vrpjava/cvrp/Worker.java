@@ -20,6 +20,7 @@ import static com.github.vrpjava.cvrp.Job.addCuts;
 import static com.github.vrpjava.cvrp.CVRPSolver.minVehicles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.findCycles;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.minimize;
+import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.toSeconds;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Comparator.comparing;
@@ -244,6 +245,12 @@ final class Worker {
                     return new NodeEvaluation(result, false);
                 }
             }
+
+            if (job.useRccAtDepth(depth) && depth == job.getParameters().maxRccDepth()) {
+                System.out.println("[" + toSeconds(System.currentTimeMillis() - job.getStart()) +
+                        "s]: Found bound " + roundBound(result.getValue(), job.maxScale()) + " at depth " + depth);
+            }
+
             return new NodeEvaluation(result, true);
         }
 

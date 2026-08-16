@@ -45,3 +45,27 @@ effect rather than a smooth runtime/quality tradeoff: 100 ms was usually enough 
 single 1-second `eil51` trial recovered the unrestricted root bound. Shallow node RCC did not pay for itself on `eil33`
 in this small sample. More trials, randomized configuration order, and additional instances are needed before changing
 defaults.
+
+## Stoer-Wagner connectivity separation (2026-08-15)
+
+After adding the exact global-minimum-cut fallback to `SubtourCuts`, three default `AUTO`/root-RCC-unrestricted trials
+gave:
+
+| Instance | Trials | Root bound | Median nodes | Median final cuts | Median runtime | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| eil33 | 3 | 835.227782375 | 350 | 240 | 1.41 s | all optimal |
+| eil51 | 3 | 514.523809526 to 514.523809533 | 4,455 | 278 | 20.53 s | all optimal |
+
+The `eil33` root bound is unchanged, and its node and runtime differences are well inside the variability seen above.
+For `eil51`, the stronger root bound appeared in every trial; median nodes fell from 5,728 to 4,455 while the additional
+cuts left median runtime essentially unchanged in this small sample. The reduced `eil33` root-bound test also moved
+from 422.810195025 to its known optimum, 428.7145713, reproducibly across three separate Maven runs. These results
+support keeping the separator enabled for the default `AUTO` configuration, but they are still exploratory rather
+than a broad performance claim. On both benchmark instances, `AUTO` switches to best-first immediately after the root,
+so these results are comparable to the earlier best-first rows.
+
+Depth-first spot checks were dominated by the solver's long-tail variability. One controlled three-trial benchmark
+favored the new separator (median 4.36 seconds and 2,223 nodes versus 10.53 seconds and 4,282 nodes at the preceding
+commit), while three separate cold/debug JVM runs reversed the medians (12.49 seconds and 3,467 nodes versus 3.70
+seconds and 2,613 nodes) and timed out once on each version. That is not evidence for a stable speedup or regression;
+larger interleaved samples would be needed before changing depth-first behavior.

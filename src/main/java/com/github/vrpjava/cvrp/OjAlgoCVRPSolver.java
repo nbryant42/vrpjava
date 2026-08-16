@@ -58,30 +58,41 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      * Search queue policy used after the root relaxation has been bounded.
      */
     public enum SearchStrategy {
-        /** Use the historical bound-ratio and elapsed-time heuristic. */
+        /**
+         * Use the historical bound-ratio and elapsed-time heuristic.
+         */
         AUTO,
-        /** Retain the LIFO queue for the entire search. */
+        /**
+         * Retain the LIFO queue for the entire search.
+         */
         DEPTH_FIRST,
-        /** Switch to the lower-bound priority queue immediately. */
+        /**
+         * Switch to the lower-bound priority queue immediately.
+         */
         BEST_FIRST
     }
 
     /**
      * Explicit controls for branch-and-cut experiments.
      *
-     * @param searchStrategy search queue policy
-     * @param maxRccDepth maximum branch depth at which to run full RCC separation; zero means root relaxation only
-     * @param rccMillis maximum wall-clock time for each RCC separation call; zero disables full RCC separation
-     * @param bestFirstRatio lower-bound/incumbent ratio required by {@link SearchStrategy#AUTO}
+     * @param searchStrategy  search queue policy
+     * @param minNodeRccDepth minimum branch depth at which to run full RCC separation at non-root nodes
+     * @param maxRccDepth     maximum branch depth at which to run full RCC separation; zero means root relaxation only
+     * @param rccMillis       maximum wall-clock time for each RCC separation call; zero disables full RCC separation
+     * @param bestFirstRatio  lower-bound/incumbent ratio required by {@link SearchStrategy#AUTO}
      * @param bestFirstMillis latest elapsed time at which {@link SearchStrategy#AUTO} may switch queue policy
      */
     public record ExperimentalParameters(SearchStrategy searchStrategy,
+                                         int minNodeRccDepth,
                                          int maxRccDepth,
                                          long rccMillis,
                                          double bestFirstRatio,
                                          long bestFirstMillis) {
         public ExperimentalParameters {
             Objects.requireNonNull(searchStrategy, "searchStrategy");
+            if (minNodeRccDepth < 1) {
+                throw new IllegalArgumentException("minNodeRccDepth must be positive.");
+            }
             if (maxRccDepth < 0) {
                 throw new IllegalArgumentException("maxRccDepth must be nonnegative.");
             }
@@ -97,11 +108,12 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
         }
 
         public static ExperimentalParameters defaults() {
-            return new ExperimentalParameters(SearchStrategy.AUTO, 0, Long.MAX_VALUE, 0.85, 30_000L);
+            return new ExperimentalParameters(SearchStrategy.AUTO, 1, 0, Long.MAX_VALUE,
+                    0.85, 30_000L);
         }
 
         boolean useRccAtDepth(int depth) {
-            return rccMillis > 0 && depth > 0 && depth <= maxRccDepth;
+            return rccMillis > 0 && depth >= minNodeRccDepth && depth <= maxRccDepth;
         }
 
         long rccDeadline(long solveDeadline) {
@@ -125,15 +137,15 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     /**
      * Measurements emitted once for each completed solve.
      *
-     * @param parameters immutable parameter snapshot used by the job
+     * @param parameters      immutable parameter snapshot used by the job
      * @param heuristicMillis time spent finding the initial incumbent
-     * @param rootState solver state for the root relaxation
-     * @param rootBound root-relaxation objective, or {@link Double#NaN} when it was not solved optimally
-     * @param rootMillis time spent building and separating the root relaxation
-     * @param rootCuts cuts present when branch-and-bound began
-     * @param nodes search nodes removed from the queue
-     * @param cuts cuts present at the end of the solve
-     * @param elapsedMillis total solve time
+     * @param rootState       solver state for the root relaxation
+     * @param rootBound       root-relaxation objective, or {@link Double#NaN} when it was not solved optimally
+     * @param rootMillis      time spent building and separating the root relaxation
+     * @param rootCuts        cuts present when branch-and-bound began
+     * @param nodes           search nodes removed from the queue
+     * @param cuts            cuts present at the end of the solve
+     * @param elapsedMillis   total solve time
      */
     public record SolveStatistics(ExperimentalParameters parameters,
                                   long heuristicMillis,
@@ -158,7 +170,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     }
 
     private volatile ExperimentalParameters experimentalParameters = ExperimentalParameters.defaults();
-    private volatile Consumer<SolveStatistics> statisticsConsumer = ignored -> { };
+    private volatile Consumer<SolveStatistics> statisticsConsumer = ignored -> {
+    };
     private CVRPSolver heuristic = new ClarkeWrightCVRPSolver();
 
     record Cut(int minVehicles, Set<Integer> subset) {
@@ -513,8 +526,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     @SuppressWarnings("unused")
     public synchronized void setBestFirstRatio(double bestFirstRatio) {
         var current = experimentalParameters;
-        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.maxRccDepth(),
-                current.rccMillis(), bestFirstRatio, current.bestFirstMillis());
+        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.minNodeRccDepth(),
+                current.maxRccDepth(), current.rccMillis(), bestFirstRatio, current.bestFirstMillis());
     }
 
     /**
@@ -526,8 +539,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     @SuppressWarnings("unused")
     public synchronized void setBestFirstMillis(long bestFirstMillis) {
         var current = experimentalParameters;
-        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.maxRccDepth(),
-                current.rccMillis(), current.bestFirstRatio(), bestFirstMillis);
+        experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.minNodeRccDepth(),
+                current.maxRccDepth(), current.rccMillis(), current.bestFirstRatio(), bestFirstMillis);
     }
 
     /**

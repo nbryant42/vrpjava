@@ -247,7 +247,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var timeout = 1000L * 60L * 60L;
         var deadline = System.currentTimeMillis() + timeout;
         var mr = (GlobalBounds) doTestEil33(17, true, timeout);
-        assertEquals(422.810195025, mr.getResult(deadline).getValue());
+        // Exact connectivity separation closes the remaining root gap for this reduced instance.
+        assertEquals(428.7145713, mr.getResult(deadline).getValue());
     }
 
     // takes about 2.5s w/ naive code; 1.5s now
@@ -371,7 +372,9 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
     }
 
-    /** See {@link #benchmarkEil33()}. */
+    /**
+     * See {@link #benchmarkEil33()}.
+     */
     @Test
     @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil51|all")
     void benchmarkEil51() throws IOException {
@@ -383,6 +386,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var parameters = new ExperimentalParameters(
                 SearchStrategy.valueOf(System.getProperty("vrp.searchStrategy",
                         defaults.searchStrategy().name()).toUpperCase(Locale.ROOT)),
+                Integer.getInteger("vrp.rccMinNodeDepth", defaults.minNodeRccDepth()),
                 Integer.getInteger("vrp.rccDepth", defaults.maxRccDepth()),
                 Long.getLong("vrp.rccMillis", defaults.rccMillis()),
                 Double.parseDouble(System.getProperty("vrp.bestFirstRatio",
@@ -473,12 +477,28 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     }
 
     // I think this is probably the same as the P-n76-k4 from Lysgaard et al.
+    // They report root bound 589.097, we get a worse bound and time out:
+    // [22.940s]: Switching to best-first search. Bounds now 586.0/646.0 (90.71%); 87 cuts, 0 nodes. Next node has bound null
+    // [1186.481s]: New solution. Bounds now 586.0/594.0 (98.65%); 614 cuts, 6440 nodes. Next node has bound 591.0
+    // 9076 nodes, 4 cycles: [[0, 4, 45, 29, 48, 47, 36, 69, 71, 60, 70, 20, 37, 5, 15, 57, 54, 13, 27, 52, 34, 67], [0, 17, 40, 3, 44, 32, 9, 39, 31, 55, 25, 50, 18, 24, 49, 56, 23, 63, 16, 51], [0, 6, 33, 73, 1, 43, 41, 42, 64, 22, 62, 28, 61, 21, 74, 30, 2, 68, 75], [0, 26, 12, 72, 58, 10, 38, 65, 11, 66, 59, 14, 53, 7, 35, 19, 8, 46]]
+    // Cycle demands: [342, 341, 332, 349]
+    // Currently 707 cuts.
+    // Total elapsed: 1800088 ms
+    //
+    // org.opentest4j.AssertionFailedError:
+    // Expected :593.0
+    // Actual   :594.0
+    //
+    // Best time so far to find a 594 solution was 732.009s
     @Test
     @Disabled
     void eilD76_k4() throws IOException {
         var timeout = 1800_000L;
 
         try (var solver = newSolver()) {
+            solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 4,
+                    5, Long.MAX_VALUE, 0.85, 60_000L));
+
             var result = doTestEilD76(solver, timeout, 360);
 
             //assertEquals(OPTIMAL, result.state());
@@ -525,18 +545,20 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         }
     }
 
-    // This one's interesting. I think it's probably the same "P-n101-k4" used by Lysgaard et al.
+    // This one's interesting. I think it's probably the same "P-n101-k4" used by Lysgaard et al, who report a root
+    // bound of 678.6, found in 127 seconds
     // Our time to bound the root node can be competitive with theirs, but we search a lot more nodes to find the
     // optimum, and sometimes ojAlgo gets stuck solving the RCC-Sep model. (It would be nice to have CPLEX here.)
     // Example log:
-    // [87.473s]: Switching to best-first search. Bounds now 673.425729429/758.0 (88.84%); 118 cuts, 0 nodes. Next node has bound null
-    // [211.168s]: New solution. Bounds now 675.825/685.0 (98.66%); 209 cuts, 2502 nodes. Next node has bound 681.0
-    // [213.111s]: New solution. Bounds now 675.825/682.0 (99.09%); 210 cuts, 2534 nodes. Next node has bound 681.0
-    // [308.909s]: New solution. Bounds now 675.825/681.0 (99.24%); 220 cuts, 3989 nodes. Next node has bound 681.0
-    // 6045 nodes, 4 cycles: [[0, 27, 69, 1, 50, 33, 81, 9, 51, 30, 70, 10, 62, 11, 19, 48, 82, 7, 88, 31, 52], [0, 28, 76, 77, 3, 79, 78, 34, 35, 71, 65, 66, 20, 32, 90, 63, 64, 49, 36, 47, 46, 8, 45, 17, 84, 5, 60, 83, 18, 89], [0, 13, 58, 40, 21, 73, 72, 74, 22, 41, 75, 56, 23, 67, 39, 4, 25, 55, 54, 24, 29, 68, 80, 12, 26, 53], [0, 6, 96, 99, 59, 92, 93, 98, 37, 100, 91, 85, 61, 16, 86, 44, 38, 14, 42, 43, 15, 57, 2, 87, 97, 95, 94]]
-    // Cycle demands: [300, 382, 384, 392]
-    // Currently 220 cuts.
-    // Total elapsed: 308915 ms
+    // Euclidean2dVrpInstance[name=eilA101, comment=(Eilon et al.), edgeWeightType=EUC_2D, dimension=101, nodeCoords=[[D@327514f, displayCoords=null, fixedEdges=null]
+    // [128.139s]: Switching to best-first search. Bounds now 676.0/758.0 (89.18%); 144 cuts, 0 nodes. Next node has bound null
+    // [536.218s]: New solution. Bounds now 676.0/681.0 (99.27%); 498 cuts, 2232 nodes. Next node has bound 681.0
+    // 4848 nodes, 4 cycles: [[0, 13, 87, 97, 92, 98, 37, 100, 91, 44, 14, 38, 86, 16, 61, 85, 93, 59, 99, 96, 95, 94, 6, 89], [0, 26, 12, 80, 68, 29, 24, 54, 55, 25, 4, 39, 67, 23, 56, 75, 72, 21, 73, 74, 22, 41, 15, 43, 42, 57, 2, 40, 58, 53], [0, 31, 88, 7, 82, 48, 19, 11, 62, 10, 70, 30, 32, 90, 63, 64, 49, 36, 47, 46, 8, 45, 17, 84, 5, 60, 83, 18, 52], [0, 27, 69, 1, 50, 33, 81, 9, 51, 20, 66, 65, 71, 35, 34, 78, 79, 3, 77, 76, 28]]
+    // Cycle demands: [396, 395, 386, 281]
+    // Currently 498 cuts.
+    // Total elapsed: 540424 ms
+    //
+    // Process finished with exit code 0
     @Test
     @Disabled
     void eilA101_k4() throws IOException {

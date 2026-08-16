@@ -54,13 +54,14 @@ Look under Project Reports.
 ## Search algorithm
 
 The algorithm first iterates on the RCC-Sep procedure (which is itself NP-hard) until it's no longer possible to
-generate additional cuts. Then it proceeds with a parallel, best-first branch-and-cut search, but the strategy for the
-non-root nodes is different from the root node. Here, it uses inexpensive connected-component cuts and derives a
-rounded-capacity cut directly from any integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved
-for tightening the root relaxation by default. `OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC
-separation through a selected branch depth and cap each separator call. These are performance controls only: optional
-separation may strengthen the relaxation, but candidate validation and exhaustive branching remain responsible for
-exactness.
+generate additional cuts. It then applies inexpensive connectivity separation: all disconnected customer components
+are cut at once, or, when the support graph is connected, one exact Stoer-Wagner global minimum cut is tested. A
+violated subset is strengthened to the rounded-capacity cut for its actual demand. The solver then proceeds with a
+parallel, best-first branch-and-cut search. At non-root nodes it also derives a rounded-capacity cut directly from any
+integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved for tightening the root relaxation by
+default. `OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC separation through a selected branch depth and
+cap each separator call. These are performance controls only: optional separation may strengthen the relaxation, but
+candidate validation and exhaustive branching remain responsible for exactness.
 
 There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the
 hardest problem instances, we may not be able to solve to optimality, so the goal would be to merely generate an

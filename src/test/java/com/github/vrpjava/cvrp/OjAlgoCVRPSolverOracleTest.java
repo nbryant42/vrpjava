@@ -60,7 +60,7 @@ class OjAlgoCVRPSolverOracleTest {
 
         try (var solver = new OjAlgoCVRPSolver()) {
             var statistics = new AtomicReference<OjAlgoCVRPSolver.SolveStatistics>();
-            var parameters = new ExperimentalParameters(BEST_FIRST, 0, 0L, 0.85, 30_000L);
+            var parameters = new ExperimentalParameters(BEST_FIRST, 1, 0, 0L, 0.85, 30_000L);
             solver.setExperimentalParameters(parameters);
             solver.setStatisticsConsumer(statistics::set);
             var actual = solver.solve(2, valueOf(2), demands, costs, 10_000L);
