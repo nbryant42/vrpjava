@@ -18,6 +18,13 @@ import static org.ojalgo.optimisation.Optimisation.State.OPTIMAL;
 
 class WorkerTest {
     @Test
+    void provenNodeBoundCanFathomBeforeFurtherSeparation() {
+        assertTrue(Worker.boundFathoms(593.0, 593.0, 0));
+        assertTrue(Worker.boundFathoms(594.0, 593.0, 0));
+        assertFalse(Worker.boundFathoms(592.0, 593.0, 0));
+    }
+
+    @Test
     void branchingCoversTheCompleteIntegerDomain() {
         assertEquals(List.of(ZERO, ONE, TWO), Worker.branchValues(ZERO, TWO));
     }

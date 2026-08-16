@@ -210,6 +210,12 @@ final class Worker {
         var rccEnabled = job.useRccAtDepth(depth);
 
         while (result.getState().isOptimal()) {
+            // An incumbent can improve while this node is being solved. Once even the current, incompletely separated
+            // relaxation cannot beat it, the node is proven fathomable and further cut generation is wasted work.
+            if (boundFathoms(result.getValue(), job.getBestKnown(), job.maxScale())) {
+                return new NodeEvaluation(result, true);
+            }
+
             if (rccEnabled) {
                 var rccCuts = RccSepCVRPCuts.generate(job.vehicleCapacity(), job.demands(), result,
                         job.rccDeadline());
@@ -255,6 +261,10 @@ final class Worker {
         }
 
         return new NodeEvaluation(result, false); // infeasible or incomplete; process() distinguishes the state.
+    }
+
+    static boolean boundFathoms(double lowerBound, double incumbent, int scale) {
+        return roundBound(lowerBound, scale) >= incumbent;
     }
 
     static Set<Cut> capacityCuts(BigDecimal vehicleCapacity,
