@@ -21,7 +21,7 @@ class CutCandidates {
         take(result, new Cut(size, result));
     }
 
-    void take(Optimisation.Result result, Cut cut) {
+    synchronized void take(Optimisation.Result result, Cut cut) {
         if (!isViolated(parentResult, size, cut.subset(), cut.minVehicles())) {
             return;
         }
@@ -45,7 +45,7 @@ class CutCandidates {
         this.parentResult = parentResult;
     }
 
-    Set<Cut> getCuts() {
-        return cuts;
+    synchronized Set<Cut> getCuts() {
+        return Set.copyOf(cuts);
     }
 }
