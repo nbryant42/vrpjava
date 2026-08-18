@@ -363,7 +363,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     /**
      * Opt-in experiment harness. Run with {@code -Dvrp.benchmark=eil33} and optionally set:
      * {@code vrp.trials}, {@code vrp.timeoutMillis}, {@code vrp.searchStrategy}, {@code vrp.rccDepth},
-     * {@code vrp.rccMillis}, {@code vrp.bestFirstRatio}, and {@code vrp.bestFirstMillis}.
+     * {@code vrp.rccMillis}, {@code vrp.threeToothMillis}, {@code vrp.bestFirstRatio}, and
+     * {@code vrp.bestFirstMillis}.
      */
     @Test
     @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil33|all")
@@ -389,6 +390,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 Integer.getInteger("vrp.rccMinNodeDepth", defaults.minNodeRccDepth()),
                 Integer.getInteger("vrp.rccDepth", defaults.maxRccDepth()),
                 Long.getLong("vrp.rccMillis", defaults.rccMillis()),
+                Long.getLong("vrp.threeToothMillis", defaults.threeToothMillis()),
                 Double.parseDouble(System.getProperty("vrp.bestFirstRatio",
                         Double.toString(defaults.bestFirstRatio()))),
                 Long.getLong("vrp.bestFirstMillis", defaults.bestFirstMillis()));
@@ -398,8 +400,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             throw new IllegalArgumentException("vrp.trials must be positive.");
         }
 
-        System.out.println("instance,trial,strategy,rccDepth,rccMillis,rootState,rootBound,rootMillis,rootCuts," +
-                "nodes,cuts,elapsedMillis,resultState,objective");
+        System.out.println("instance,trial,strategy,rccDepth,rccMillis,threeToothMillis,rootState,rootBound," +
+                "rootMillis,rootCuts,nodes,cuts,elapsedMillis,resultState,objective");
         for (var trial = 1; trial <= trials; trial++) {
             var statistics = new AtomicReference<OjAlgoCVRPSolver.SolveStatistics>();
             Result result;
@@ -412,10 +414,11 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             var stats = statistics.get();
             assertNotNull(stats);
             System.out.printf(Locale.ROOT,
-                    "%s,%d,%s,%d,%d,%s,%.12f,%d,%d,%d,%d,%d,%s,%.12f%n",
+                    "%s,%d,%s,%d,%d,%d,%s,%.12f,%d,%d,%d,%d,%d,%s,%.12f%n",
                     instance, trial, parameters.searchStrategy(), parameters.maxRccDepth(), parameters.rccMillis(),
-                    stats.rootState(), stats.rootBound(), stats.rootMillis(), stats.rootCuts(), stats.nodes(),
-                    stats.cuts(), stats.elapsedMillis(), result.state(), result.objective());
+                    parameters.threeToothMillis(), stats.rootState(), stats.rootBound(), stats.rootMillis(),
+                    stats.rootCuts(), stats.nodes(), stats.cuts(), stats.elapsedMillis(), result.state(),
+                    result.objective());
         }
     }
 
@@ -528,7 +531,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
         try (var solver = newSolver()) {
             solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 5,
-                    5, Long.MAX_VALUE, 0.85, 60_000L));
+                    5, Long.MAX_VALUE, 60_000L, 0.85, 120_000L));
 
             var result = doTestEilD76(solver, timeout, 360);
 

@@ -1,8 +1,8 @@
 # Repository map
 
-Last verified: 2026-08-15.
+Last verified: 2026-08-18.
 
-`vrpjava` is a Java 21 educational implementation of heuristic and exact vehicle-routing algorithms. It uses ojAlgo
+`vrpjava` is a Java 25 educational implementation of heuristic and exact vehicle-routing algorithms. It uses ojAlgo
 for mathematical optimization and intentionally exposes whether a result is heuristic, merely feasible, or proven
 optimal. It is a library plus tests; there is no command-line application. See `README.md` for the motivating papers,
 usage notes, performance observations, and the non-commercial license.
@@ -13,9 +13,9 @@ usage notes, performance observations, and the non-commercial license.
   `CVRPSolver.Result` with a `State`, objective, and set of routes.
 - `com.github.vrpjava.cvrp.OjAlgoCVRPSolver` is the exact symmetric CVRP facade. One instance owns a scheduler and worker
   threads, so callers should reuse it and close it (prefer try-with-resources).
-- `OjAlgoCVRPSolver.ExperimentalParameters` snapshots search strategy, node RCC depth, per-call RCC budget, and the
-  automatic search thresholds for each job. `SolveStatistics` reports root bound/time/cuts and final nodes/cuts/time
-  through a per-solve callback; it does not use shared "last run" state.
+- `OjAlgoCVRPSolver.ExperimentalParameters` snapshots search strategy, node RCC depth, per-call RCC budget, the
+  root-only three-tooth budget, and the automatic search thresholds for each job. `SolveStatistics` reports root
+  bound/time/cuts and final nodes/cuts/time through a per-solve callback; it does not use shared "last run" state.
 - `ClarkeWrightCVRPSolver` and `NearestNeighborCVRPSolver` are CVRP heuristics. Clarke-Wright is the exact solver's
   default incumbent generator and is replaceable through `setHeuristic(...)`.
 - `com.github.vrpjava.atsp.ATSPSolver` is the ATSP base API and also contains a nearest-neighbor heuristic.
@@ -39,7 +39,8 @@ ATSP uses a full square cost matrix and returns an ordered list of directed `Edg
 2. `OjAlgoCVRPSolver.doSolve(...)` creates a `Job`.
 3. `Job` obtains a heuristic incumbent, builds the relaxed two-index vehicle-flow model, and tightens the root bound.
 4. `Worker.updateBounds(...)` alternates ojAlgo solves with rounded-capacity cuts from `RccSepCVRPCuts` and cheaper
-   connectivity cuts from `SubtourCuts`.
+   connectivity cuts from `SubtourCuts`. When explicitly enabled, `ThreeToothCuts` runs last and adds one restricted
+   2-matching inequality before the loop returns to RCC separation.
 5. `Job.run()` queues the root node and registers it with the solver-owned `Scheduler`.
 6. `Scheduler` shares worker threads fairly across jobs. Each `Worker` copies the global model, fixes branch variables,
    solves and separates the node, then either resolves it, queues one child for every integer value in the selected
@@ -60,6 +61,8 @@ Supporting classes:
   rounded-capacity requirement.
 - `StoerWagnerMinimumCut`: package-private, dependency-free `O(|V|^3)` global minimum cut for nonnegative undirected
   `BigDecimal` graphs.
+- `ThreeToothCuts`: optional root-only exact MILP separator for three disjoint two-customer teeth. It is disabled by
+  default, uses one total root budget, and independently validates a cut before adding it.
 - `Util`: matrix validation, model/deadline setup, variable construction, cost lookup, and optional hardware tuning.
 
 ## Tests

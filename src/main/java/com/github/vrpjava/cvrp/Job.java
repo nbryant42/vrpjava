@@ -18,6 +18,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import static com.github.vrpjava.Util.newModel;
 import static com.github.vrpjava.cvrp.OjAlgoCVRPSolver.buildConstraints;
@@ -90,7 +91,8 @@ class Job {
                 timeout);
         this.heuristicMillis = System.currentTimeMillis() - phaseStart;
         phaseStart = System.currentTimeMillis();
-        this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline, parameters);
+        this.globalBounds = initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline, parameters,
+                message -> solver.debug("[" + toSeconds(System.currentTimeMillis() - start) + "s]: " + message));
         this.rootMillis = System.currentTimeMillis() - phaseStart;
         this.rootCuts = countCuts();
         this.maxScale = maxScale(costMatrix);
@@ -113,19 +115,22 @@ class Job {
     static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
                                    BigDecimal[][] costMatrix, long deadline) {
         return initBounds(minVehicles, vehicleCapacity, demands, costMatrix, deadline,
-                ExperimentalParameters.defaults());
+                ExperimentalParameters.defaults(), ignored -> {
+                });
     }
 
     private static GlobalBounds initBounds(int minVehicles, BigDecimal vehicleCapacity, BigDecimal[] demands,
                                            BigDecimal[][] costMatrix, long deadline,
-                                           ExperimentalParameters parameters) {
+                                           ExperimentalParameters parameters,
+                                           Consumer<String> progress) {
         var model = newModel(deadline);
         var vars = buildVars(costMatrix, model);
 
         buildConstraints(model, minVehicles, vars);
         model.relax();
 
-        return new GlobalBounds(model, updateBounds(vehicleCapacity, demands, model, null, deadline, parameters));
+        return new GlobalBounds(model,
+                updateBounds(vehicleCapacity, demands, model, null, deadline, parameters, progress));
     }
 
     private static int doAddCuts(Collection<Cut> candidates,

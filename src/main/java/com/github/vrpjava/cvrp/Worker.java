@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
@@ -166,10 +167,26 @@ final class Worker {
                                             Job job,
                                             long deadline,
                                             ExperimentalParameters parameters) {
+        return updateBounds(vehicleCapacity, demands, model, job, deadline, parameters, ignored -> {
+        });
+    }
+
+    static Optimisation.Result updateBounds(BigDecimal vehicleCapacity,
+                                            BigDecimal[] demands,
+                                            ExpressionsBasedModel model,
+                                            Job job,
+                                            long deadline,
+                                            ExperimentalParameters parameters,
+                                            Consumer<String> progress) {
         var result = minimize(model, deadline);
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
         var rccEnabled = parameters.rccMillis() > 0;
+        var threeToothEnabled = parameters.threeToothMillis() > 0;
+        var threeToothDeadline = 0L;
+        var threeToothCuts = new HashSet<ThreeToothCuts.Cut>();
+        var threeToothStarted = false;
+        var threeToothFinished = false;
 
         while (result.getState().isOptimal()) {
             if (rccEnabled) {
@@ -191,8 +208,47 @@ final class Worker {
                 continue;
             }
 
+            if (threeToothEnabled) {
+                if (threeToothDeadline == 0L) {
+                    // The budget starts only after the configured RCI separators decline to add another cut, and is
+                    // shared by every three-tooth iteration at this root. RCC may have been disabled or timed out;
+                    // comb separation remains optional and proof-safe in that case, though its cuts may be dominated.
+                    threeToothDeadline = parameters.threeToothDeadline(deadline);
+                    threeToothStarted = true;
+                    progress.accept("Starting 3-tooth separation");
+                }
+                var separation = ThreeToothCuts.generate(vehicleCapacity, demands, result, threeToothDeadline);
+                var cutAdded = separation.cut().filter(threeToothCuts::add).map(cut -> {
+                    ThreeToothCuts.addTo(model, cut);
+                    return true;
+                }).orElse(false);
+
+                if (!separation.complete()) {
+                    threeToothEnabled = false;
+                    threeToothFinished = true;
+                    progress.accept("3-tooth separation found " + threeToothCuts.size() + " cuts");
+                    progress.accept("3-tooth separation timed out.");
+                } else if (!cutAdded) {
+                    threeToothEnabled = false;
+                    threeToothFinished = true;
+                    progress.accept("3-tooth separation found " + threeToothCuts.size() + " cuts");
+                }
+
+                if (cutAdded) {
+                    result = minimize(model, deadline);
+                    continue;
+                }
+            }
+
             // no more cuts to add. done.
             break;
+        }
+
+        if (threeToothStarted && !threeToothFinished) {
+            progress.accept("3-tooth separation found " + threeToothCuts.size() + " cuts");
+            if (System.currentTimeMillis() >= threeToothDeadline) {
+                progress.accept("3-tooth separation timed out.");
+            }
         }
 
         // done or timed out.

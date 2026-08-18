@@ -60,7 +60,8 @@ violated subset is strengthened to the rounded-capacity cut for its actual deman
 parallel, best-first branch-and-cut search. At non-root nodes it also derives a rounded-capacity cut directly from any
 integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved for tightening the root relaxation by
 default. `OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC separation through a selected branch depth and
-cap each separator call. These are performance controls only: optional separation may strengthen the relaxation, but
+cap each separator call. It can also enable an experimental root-only exact separator for restricted three-tooth
+2-matching inequalities. These are performance controls only: optional separation may strengthen the relaxation, but
 candidate validation and exhaustive branching remain responsible for exactness.
 
 There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the

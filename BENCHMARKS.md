@@ -9,6 +9,7 @@ The `benchmarkEil33` and `benchmarkEil51` tests are disabled unless `vrp.benchma
 - `vrp.rccDepth`: maximum branch depth for full RCC separation; `0` means root only
 - `vrp.rccMillis`: budget for each RCC separation call; `0` disables full RCC and `Long.MAX_VALUE` is limited only by
   the solve deadline
+- `vrp.threeToothMillis`: total root budget for the restricted three-tooth separator; `0` disables it (the default)
 - `vrp.bestFirstRatio` and `vrp.bestFirstMillis`: thresholds used only by `AUTO`
 
 For example, from PowerShell:
@@ -16,7 +17,7 @@ For example, from PowerShell:
 ```powershell
 .\mvnw.cmd "-Dtest=OjAlgoCVRPSolverTest#benchmarkEil51" "-Dvrp.benchmark=eil51" `
   "-Dvrp.trials=3" "-Dvrp.timeoutMillis=60000" "-Dvrp.searchStrategy=BEST_FIRST" `
-  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" test
+  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" "-Dvrp.threeToothMillis=10000" test
 ```
 
 ## Initial observations (2026-08-15)
@@ -69,3 +70,25 @@ favored the new separator (median 4.36 seconds and 2,223 nodes versus 10.53 seco
 commit), while three separate cold/debug JVM runs reversed the medians (12.49 seconds and 3,467 nodes versus 3.70
 seconds and 2,613 nodes) and timed out once on each version. That is not evidence for a stable speedup or regression;
 larger interleaved samples would be needed before changing depth-first behavior.
+
+## Restricted three-tooth experiment (2026-08-18)
+
+The first root-only fixed-three-tooth implementation was tested on `eil51` with `BEST_FIRST`, unrestricted root RCC,
+and a 15-second total three-tooth budget. One no-comb control and four separate comb-enabled trials gave:
+
+| Configuration | Trials | Root bound | Median root time | Median nodes | Median final cuts | Median runtime | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| no comb | 1 | 514.523809533 | 15.20 s | 3,989 | 302 | 27.36 s | optimal |
+| three-tooth, 15 s | 4 | 515.913043465 to 516.142857165 | 31.14 s | 1,353 | 246 | 35.83 s | all optimal |
+
+The stronger bound appeared in every enabled trial and substantially reduced the search tree and final cut count. The
+extra root work did not yet pay back consistently in elapsed time: one enabled trial spent 90 seconds at the root,
+apparently in the familiar ojAlgo/RCC long tail after a comb cut caused the separation loop to restart. This is strong
+evidence that the restricted family adds polyhedral strength on `eil51`, but not enough runtime data to enable it by
+default. Smaller budgets and better control of the RCC re-solves are the next useful experiments.
+
+A subsequent `eilD76_k4` spot check used depth-5 node RCC and a 60-second three-tooth budget. Two comb cuts raised the
+rounded root bound from 586 to 587, but root time increased from 20.8 to 73.6 seconds. The known 593 solution appeared
+after 1,144 seconds and 1,399 nodes, compared with 945 seconds and 1,063 nodes in the earlier no-comb run; neither run
+proved optimality within 30 minutes. This is only a pair of highly variable runs, but it reinforces the need for a
+strict separator budget and gives no reason to enable exact three-tooth separation by default.

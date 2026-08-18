@@ -221,7 +221,15 @@ x(E(H))+x(F)\le |H|+1, \tag{9}
 $$
 
 where $F$ is the selected three-edge matching. Equations (7) and (9) are equivalent under the customer degree
-equations. Variables $z_{ij}$ whose $x^*_{ij}=0$ do not affect the objective and may simply be omitted.
+equations. Variables $z_{ij}$ whose $x^*_{ij}=0$ do not affect the objective and may simply be omitted. Zero-support
+tooth variables can also be omitted exactly. Under the customer degree equations, the violation is
+
+$$
+x^*(F)-\frac{x^*(\delta(H))}{2}-1.
+$$
+
+Since $F\subseteq\delta(H)$, a violation requires $x^*(F)>2$. With three tooth edges individually bounded by one,
+all three selected edges must therefore have positive support.
 
 For a fixed integer handle, the feasible $f$ variables form a cardinality-three matching polytope on a bipartite graph,
 so they can in principle be continuous; a separate matching step can recover an integral optimum in the event of a
@@ -282,18 +290,21 @@ problem: for $t=3$, the model has seven membership categories per customer and f
 variables. Its search space is much larger than RCC-Sep's binary in/out selection, before accounting for tooth-label
 symmetry.
 
-## Verification and next steps
+## Implementation status and next steps
 
-One prerequisite is now complete: `SubtourCuts` uses exact global minimum cut to close the connected $k=1$ gap. If
-comb separation is pursued, the remaining safe order is:
+`ThreeToothCuts` now implements this restricted separator as an optional root-only experiment. It runs only after
+RCC-Sep and `SubtourCuts` have found no cut, adds one independently validated inequality, and then returns to RCC
+separation. Its one total root budget is configured through `ExperimentalParameters`; the default is zero, so existing
+solver behavior is unchanged unless the experiment is explicitly enabled.
 
-1. Add a pure evaluator for (7)/(9), plus an exhaustive tiny-instance oracle over handles and three-edge matchings.
-2. Validate every generated inequality against every feasible CVRP solution on tiny instances.
-3. Compare the MILP optimum with the exhaustive separation optimum on tiny fractional degree-feasible points.
-4. Run the separator only at the root, behind an experimental parameter and a strict time budget. A timed-out separator
-   may contribute validated feasible incumbent cuts, but failure to finish must never affect proof completeness.
-5. Benchmark root bound, total nodes, cuts, and runtime. The paper reports no comb-bound improvement for EIL33 but does
+The pure evaluator, exhaustive tiny handle/matching oracle, model comparison, and exhaustive feasible-routing validity
+checks cover the first three items from the original plan. The remaining experimental sequence is:
+
+1. Benchmark root bound, total nodes, cuts, and runtime. The paper reports no comb-bound improvement for EIL33 but does
    report one for EIL51, so EIL51 is the more plausible initial target.
+2. Treat larger teeth as a heuristic-search problem. The narrow exact separator improves some root bounds, but is
+   already slow enough that a substantially larger exact set-selection MILP is unlikely to pay for itself. Promising
+   follow-ups include enlarging candidate teeth greedily and retaining a small pool of near-optimal seeds.
 
 The original fixed-two-tooth MILP should not be implemented. If the three-tooth 2-matching experiment shows no useful
 bound improvement, the larger arbitrary-tooth MILP is unlikely to justify its cost.

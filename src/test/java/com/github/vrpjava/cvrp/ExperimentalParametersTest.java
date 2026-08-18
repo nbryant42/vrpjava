@@ -19,6 +19,7 @@ class ExperimentalParametersTest {
 
         assertEquals(AUTO, parameters.searchStrategy());
         assertEquals(Long.MAX_VALUE, parameters.rccMillis());
+        assertEquals(0L, parameters.threeToothMillis());
         assertFalse(parameters.useRccAtDepth(1));
         assertEquals(1234L, parameters.rccDeadline(1234L));
         assertTrue(parameters.useBestFirst(0.90, 1_000L));
@@ -60,6 +61,8 @@ class ExperimentalParametersTest {
                         () -> new ExperimentalParameters(AUTO, 1, -1, 0L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new ExperimentalParameters(AUTO, 1, 0, -1L, 0.85, 30_000L)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0.0, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
