@@ -53,11 +53,19 @@ Every commit message must use this structure:
 ```text
 Short imperative header
 
-Explain what changed and why, with a little more detail. Mention important correctness implications and verification
-when relevant.
+Explain what changed and why, with a little more detail. Mention important
+correctness implications and verification when relevant.
 
 Co-authored-by: Codex (GPT-5.6 Sol) <codex@openai.com>
 ```
 
-Keep the header concise, separate the header, body, and trailer with blank lines, and make the co-author trailer the
-final line.
+Keep the header concise. Wrap body paragraphs at no more than 80 columns.
+Separate the header, body, and trailer with blank lines, and make the co-author
+trailer the final line.
+
+On PowerShell, do not encode multiline commit messages with `\n` inside a
+command argument: PowerShell passes those characters through literally. Write
+the complete message, including real blank lines and the trailer, to a
+temporary UTF-8 text file and use `git commit -F <message-file>` (or
+`git commit --amend -F <message-file>`). Remove the temporary file afterward,
+and verify the result with `git log -1 --format=full`.
