@@ -182,6 +182,11 @@ final class Worker {
         var cuts = new HashSet<Set<Integer>>();
         var size = demands.length;
         var rccEnabled = parameters.rccMillis() > 0;
+        var heuristicCombEnabled = parameters.heuristicCombMillis() > 0;
+        var heuristicCombDeadline = 0L;
+        var heuristicCombCuts = new HashSet<HeuristicCombCuts.Cut>();
+        var heuristicCombStarted = false;
+        var heuristicCombFinished = false;
         var threeToothEnabled = parameters.threeToothMillis() > 0;
         var threeToothDeadline = 0L;
         var threeToothCuts = new HashSet<ThreeToothCuts.Cut>();
@@ -206,6 +211,40 @@ final class Worker {
             if (addCuts(subtourCuts, cuts, model, result, job, size) > 0) {
                 result = minimize(model, deadline);
                 continue;
+            }
+
+            if (heuristicCombEnabled) {
+                if (heuristicCombDeadline == 0L) {
+                    heuristicCombDeadline = parameters.heuristicCombDeadline(deadline);
+                    heuristicCombStarted = true;
+                    progress.accept("Starting heuristic comb separation");
+                }
+
+                var separation = HeuristicCombCuts.generate(vehicleCapacity, demands, result,
+                        heuristicCombDeadline);
+                var added = 0;
+                for (var cut : separation.cuts()) {
+                    if (heuristicCombCuts.add(cut)) {
+                        HeuristicCombCuts.addTo(model, cut, size);
+                        added++;
+                    }
+                }
+
+                if (separation.timedOut()) {
+                    heuristicCombEnabled = false;
+                    heuristicCombFinished = true;
+                    progress.accept("Heuristic comb separation found " + heuristicCombCuts.size() + " cuts");
+                    progress.accept("Heuristic comb separation timed out.");
+                } else if (added == 0) {
+                    heuristicCombEnabled = false;
+                    heuristicCombFinished = true;
+                    progress.accept("Heuristic comb separation found " + heuristicCombCuts.size() + " cuts");
+                }
+
+                if (added > 0) {
+                    result = minimize(model, deadline);
+                    continue;
+                }
             }
 
             if (threeToothEnabled) {
@@ -242,6 +281,13 @@ final class Worker {
 
             // no more cuts to add. done.
             break;
+        }
+
+        if (heuristicCombStarted && !heuristicCombFinished) {
+            progress.accept("Heuristic comb separation found " + heuristicCombCuts.size() + " cuts");
+            if (System.currentTimeMillis() >= heuristicCombDeadline) {
+                progress.accept("Heuristic comb separation timed out.");
+            }
         }
 
         if (threeToothStarted && !threeToothFinished) {

@@ -79,7 +79,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
      * @param minNodeRccDepth minimum branch depth at which to run full RCC separation at non-root nodes
      * @param maxRccDepth     maximum branch depth at which to run full RCC separation; zero means root relaxation only
      * @param rccMillis       maximum wall-clock time for each RCC separation call; zero disables full RCC separation
-     * @param threeToothMillis total wall-clock budget for root-only three-tooth separation; zero disables it
+     * @param heuristicCombMillis total wall-clock budget for root-only heuristic strengthened-comb separation;
+     *                            zero disables it
+     * @param threeToothMillis total wall-clock budget for root-only exact three-tooth separation; zero disables it
      * @param bestFirstRatio  lower-bound/incumbent ratio required by {@link SearchStrategy#AUTO}
      * @param bestFirstMillis latest elapsed time at which {@link SearchStrategy#AUTO} may switch queue policy
      */
@@ -87,6 +89,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
                                          int minNodeRccDepth,
                                          int maxRccDepth,
                                          long rccMillis,
+                                         long heuristicCombMillis,
                                          long threeToothMillis,
                                          double bestFirstRatio,
                                          long bestFirstMillis) {
@@ -94,9 +97,20 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
                                       int minNodeRccDepth,
                                       int maxRccDepth,
                                       long rccMillis,
+                                      long threeToothMillis,
                                       double bestFirstRatio,
                                       long bestFirstMillis) {
-            this(searchStrategy, minNodeRccDepth, maxRccDepth, rccMillis, 0L, bestFirstRatio, bestFirstMillis);
+            this(searchStrategy, minNodeRccDepth, maxRccDepth, rccMillis, 0L, threeToothMillis, bestFirstRatio,
+                    bestFirstMillis);
+        }
+
+        public ExperimentalParameters(SearchStrategy searchStrategy,
+                                      int minNodeRccDepth,
+                                      int maxRccDepth,
+                                      long rccMillis,
+                                      double bestFirstRatio,
+                                      long bestFirstMillis) {
+            this(searchStrategy, minNodeRccDepth, maxRccDepth, rccMillis, 0L, 0L, bestFirstRatio, bestFirstMillis);
         }
 
         public ExperimentalParameters {
@@ -110,6 +124,9 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
             if (rccMillis < 0) {
                 throw new IllegalArgumentException("rccMillis must be nonnegative.");
             }
+            if (heuristicCombMillis < 0) {
+                throw new IllegalArgumentException("heuristicCombMillis must be nonnegative.");
+            }
             if (threeToothMillis < 0) {
                 throw new IllegalArgumentException("threeToothMillis must be nonnegative.");
             }
@@ -122,7 +139,7 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
         }
 
         public static ExperimentalParameters defaults() {
-            return new ExperimentalParameters(SearchStrategy.AUTO, 1, 0, Long.MAX_VALUE, 0L,
+            return new ExperimentalParameters(SearchStrategy.AUTO, 1, 0, Long.MAX_VALUE, 0L, 0L,
                     0.85, 30_000L);
         }
 
@@ -136,6 +153,10 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
 
         long threeToothDeadline(long solveDeadline) {
             return separationDeadline(solveDeadline, threeToothMillis);
+        }
+
+        long heuristicCombDeadline(long solveDeadline) {
+            return separationDeadline(solveDeadline, heuristicCombMillis);
         }
 
         private static long separationDeadline(long solveDeadline, long budgetMillis) {
@@ -549,8 +570,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     public synchronized void setBestFirstRatio(double bestFirstRatio) {
         var current = experimentalParameters;
         experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.minNodeRccDepth(),
-                current.maxRccDepth(), current.rccMillis(), current.threeToothMillis(), bestFirstRatio,
-                current.bestFirstMillis());
+                current.maxRccDepth(), current.rccMillis(), current.heuristicCombMillis(), current.threeToothMillis(),
+                bestFirstRatio, current.bestFirstMillis());
     }
 
     /**
@@ -563,8 +584,8 @@ public class OjAlgoCVRPSolver extends CVRPSolver implements AutoCloseable {
     public synchronized void setBestFirstMillis(long bestFirstMillis) {
         var current = experimentalParameters;
         experimentalParameters = new ExperimentalParameters(current.searchStrategy(), current.minNodeRccDepth(),
-                current.maxRccDepth(), current.rccMillis(), current.threeToothMillis(), current.bestFirstRatio(),
-                bestFirstMillis);
+                current.maxRccDepth(), current.rccMillis(), current.heuristicCombMillis(), current.threeToothMillis(),
+                current.bestFirstRatio(), bestFirstMillis);
     }
 
     /**

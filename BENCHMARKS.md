@@ -9,6 +9,7 @@ The `benchmarkEil33` and `benchmarkEil51` tests are disabled unless `vrp.benchma
 - `vrp.rccDepth`: maximum branch depth for full RCC separation; `0` means root only
 - `vrp.rccMillis`: budget for each RCC separation call; `0` disables full RCC and `Long.MAX_VALUE` is limited only by
   the solve deadline
+- `vrp.heuristicCombMillis`: total root budget for heuristic strengthened-comb separation; `0` disables it (the default)
 - `vrp.threeToothMillis`: total root budget for the restricted three-tooth separator; `0` disables it (the default)
 - `vrp.bestFirstRatio` and `vrp.bestFirstMillis`: thresholds used only by `AUTO`
 
@@ -17,7 +18,7 @@ For example, from PowerShell:
 ```powershell
 .\mvnw.cmd "-Dtest=OjAlgoCVRPSolverTest#benchmarkEil51" "-Dvrp.benchmark=eil51" `
   "-Dvrp.trials=3" "-Dvrp.timeoutMillis=60000" "-Dvrp.searchStrategy=BEST_FIRST" `
-  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" "-Dvrp.threeToothMillis=10000" test
+  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" "-Dvrp.heuristicCombMillis=10000" test
 ```
 
 ## Initial observations (2026-08-15)
@@ -92,3 +93,18 @@ rounded root bound from 586 to 587, but root time increased from 20.8 to 73.6 se
 after 1,144 seconds and 1,399 nodes, compared with 945 seconds and 1,063 nodes in the earlier no-comb run; neither run
 proved optimality within 30 minutes. This is only a pair of highly variable runs, but it reinforces the need for a
 strict separator budget and gives no reason to enable exact three-tooth separation by default.
+
+## Heuristic strengthened-comb smoke tests (2026-08-19)
+
+Two `eil51` smoke trials used `BEST_FIRST`, unrestricted root RCC, a 10-second total heuristic-comb budget, and no exact
+three-tooth separation:
+
+| Conditions | Root bound | Root time | Nodes | Final cuts | Total time | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| competing heavy CPU task | 516.379310338 | 28.83 s | 1,928 | 346 | 69.27 s | optimal |
+| otherwise idle machine | 516.333333339 | 29.26 s | 553 | 234 | 34.53 s | optimal |
+
+Both bounds are stronger than all four restricted-exact trials above, which is encouraging evidence that broader teeth
+matter. Nearly identical root times but sharply different search times also fit this repository's high parallel-search
+variability. The clean trial was slightly faster than the restricted-exact median and substantially reduced its median
+node count, but these are not interleaved samples; more trials are still required before claiming a speedup.

@@ -81,6 +81,27 @@ class WorkerTest {
         assertEquals(List.of("Starting 3-tooth separation", "3-tooth separation found 1 cuts"), progress);
     }
 
+    @Test
+    void optionalHeuristicCombSeparationTightensTheRootUpdate() {
+        var demands = new BigDecimal[]{ZERO, ONE, ONE, ONE, ONE, ONE, ONE};
+        var capacity = BigDecimal.valueOf(6);
+        var deadline = Long.MAX_VALUE;
+        var disabled = new ExperimentalParameters(SearchStrategy.BEST_FIRST, 1, 0,
+                0L, 0L, 0L, 0.85, 30_000L);
+        var enabled = new ExperimentalParameters(SearchStrategy.BEST_FIRST, 1, 0,
+                0L, 10_000L, 0L, 0.85, 30_000L);
+        var progress = new ArrayList<String>();
+
+        var withoutComb = Worker.updateBounds(capacity, demands, violatedThreeToothModel(), null, deadline, disabled);
+        var withComb = Worker.updateBounds(capacity, demands, violatedThreeToothModel(), null, deadline, enabled,
+                progress::add);
+
+        assertTrue(withoutComb.getState().isOptimal());
+        assertEquals(INFEASIBLE, withComb.getState());
+        assertEquals(List.of("Starting heuristic comb separation", "Heuristic comb separation found 1 cuts"),
+                progress);
+    }
+
     private static ExpressionsBasedModel violatedThreeToothModel() {
         var edges = new double[7][7];
         edge(edges, 1, 2, 0.5);

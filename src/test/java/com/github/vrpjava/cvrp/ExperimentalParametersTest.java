@@ -19,6 +19,7 @@ class ExperimentalParametersTest {
 
         assertEquals(AUTO, parameters.searchStrategy());
         assertEquals(Long.MAX_VALUE, parameters.rccMillis());
+        assertEquals(0L, parameters.heuristicCombMillis());
         assertEquals(0L, parameters.threeToothMillis());
         assertFalse(parameters.useRccAtDepth(1));
         assertEquals(1234L, parameters.rccDeadline(1234L));
@@ -51,6 +52,14 @@ class ExperimentalParametersTest {
     }
 
     @Test
+    void previousThreeToothConstructorLeavesTheNewHeuristicDisabled() {
+        var parameters = new ExperimentalParameters(AUTO, 1, 0, 1_000L, 2_000L, 0.85, 30_000L);
+
+        assertEquals(0L, parameters.heuristicCombMillis());
+        assertEquals(2_000L, parameters.threeToothMillis());
+    }
+
+    @Test
     void invalidParametersAreRejected() {
         assertAll(
                 () -> assertThrows(NullPointerException.class,
@@ -61,6 +70,8 @@ class ExperimentalParametersTest {
                         () -> new ExperimentalParameters(AUTO, 1, -1, 0L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new ExperimentalParameters(AUTO, 1, 0, -1L, 0.85, 30_000L)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,

@@ -298,13 +298,17 @@ separation. Its one total root budget is configured through `ExperimentalParamet
 solver behavior is unchanged unless the experiment is explicitly enabled.
 
 The pure evaluator, exhaustive tiny handle/matching oracle, model comparison, and exhaustive feasible-routing validity
-checks cover the first three items from the original plan. The remaining experimental sequence is:
+checks cover the first three items from the original plan. `HeuristicCombCuts` now implements a first broader search:
+fractional-support components and biconnected blocks propose handles, several greedy crossing-edge matchings propose
+odd ordinary combs, and bounded greedy paths add unused customers to disjoint teeth while recomputing the full
+strengthened right-hand side. It intentionally omits the paper's tight-set shrinking and Padberg-Rao fallback.
+
+The remaining experimental sequence is:
 
 1. Benchmark root bound, total nodes, cuts, and runtime. The paper reports no comb-bound improvement for EIL33 but does
    report one for EIL51, so EIL51 is the more plausible initial target.
-2. Treat larger teeth as a heuristic-search problem. The narrow exact separator improves some root bounds, but is
-   already slow enough that a substantially larger exact set-selection MILP is unlikely to pay for itself. Promising
-   follow-ups include enlarging candidate teeth greedily and retaining a small pool of near-optimal seeds.
+2. Compare the heuristic with the narrow exact separator, both separately and as an exact fallback. If its cheap
+   candidate search is useful, consider tight-set shrinking, better fixed-handle matching, and a Padberg-Rao fallback.
 
 The original fixed-two-tooth MILP should not be implemented. If the three-tooth 2-matching experiment shows no useful
 bound improvement, the larger arbitrary-tooth MILP is unlikely to justify its cost.
