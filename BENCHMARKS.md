@@ -6,11 +6,16 @@ The `benchmarkEil33` and `benchmarkEil51` tests are disabled unless `vrp.benchma
 - `vrp.trials` (default `3`)
 - `vrp.timeoutMillis` (default `300000`)
 - `vrp.searchStrategy`: `AUTO`, `DEPTH_FIRST`, or `BEST_FIRST`
+- `vrp.rccMinNodeDepth`: minimum non-root branch depth for full RCC separation; the root is always considered
 - `vrp.rccDepth`: maximum branch depth for full RCC separation; `0` means root only
 - `vrp.rccMillis`: budget for each RCC separation call; `0` disables full RCC and `Long.MAX_VALUE` is limited only by
   the solve deadline
 - `vrp.heuristicCombMillis`: total root budget for heuristic strengthened-comb separation; `0` disables it (the default)
+- `vrp.multistarMillis`: total root budget for exact generalized-large-multistar separation; `0` disables it (the
+  default)
 - `vrp.threeToothMillis`: total root budget for the restricted three-tooth separator; `0` disables it (the default)
+- `vrp.capacity`: override the benchmark instance's vehicle capacity (`8000` for `eil33`, `160` for `eil51`)
+- `vrp.roundCosts`: use integer-rounded edge costs for `eil33`; `eil51` is always rounded
 - `vrp.bestFirstRatio` and `vrp.bestFirstMillis`: thresholds used only by `AUTO`
 
 For example, from PowerShell:
@@ -18,7 +23,8 @@ For example, from PowerShell:
 ```powershell
 .\mvnw.cmd "-Dtest=OjAlgoCVRPSolverTest#benchmarkEil51" "-Dvrp.benchmark=eil51" `
   "-Dvrp.trials=3" "-Dvrp.timeoutMillis=60000" "-Dvrp.searchStrategy=BEST_FIRST" `
-  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" "-Dvrp.heuristicCombMillis=10000" test
+  "-Dvrp.rccDepth=0" "-Dvrp.rccMillis=1000" "-Dvrp.heuristicCombMillis=10000" `
+  "-Dvrp.multistarMillis=2000" test
 ```
 
 ## Initial observations (2026-08-15)
@@ -108,3 +114,37 @@ Both bounds are stronger than all four restricted-exact trials above, which is e
 matter. Nearly identical root times but sharply different search times also fit this repository's high parallel-search
 variability. The clean trial was slightly faster than the restricted-exact median and substantially reduced its median
 node count, but these are not interleaved samples; more trials are still required before claiming a speedup.
+
+## Exact generalized-large-multistar smoke tests (2026-09-01)
+
+The initial GLM implementation separated one most-violated nucleus at a time by an exact directed minimum cut. The
+final prototype also extracts a linear-size canonical subset of tied minimum cuts from the residual graph, then adds
+the equally strongest GLMs as one batch before re-solving. It remains root-only and disabled by default. The base model
+in both the disabled and enabled rows below also fixed customer edges to zero when their endpoint demands together
+exceed vehicle capacity; comparisons with older commits therefore cannot isolate that valid preprocessing change.
+
+These are single same-worktree smoke trials, not runtime claims. They used `BEST_FIRST`, unrestricted root RCC, no comb
+or three-tooth separator, and integer-rounded costs. The rounded `eil33` runs used capacity 4000 and timed out; the
+`eil51` runs used capacity 160 and proved the known optimum of 521.
+
+| Instance/configuration | Root bound | Root time | Root cuts | Nodes | Total time | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| eil51, GLM disabled | 514.523809553 | 12.03 s | 117 | 4,861 | 23.09 s | optimal |
+| eil51, GLM 10 s | 514.523809539 | 12.35 s | 125 | 3,153 | 18.93 s | optimal |
+| eil33/Q4000, GLM disabled | 1427.166666634 | 5.30 s | 201 | 9,683 | 30.00 s | timed out, incumbent 1531 |
+| eil33/Q4000, single-cut GLM 2 s | 1428.745740000 | 7.31 s | 196 | 3,638 | 15.00 s | timed out, incumbent 1531 |
+| eil33/Q4000, single-cut GLM 10 s | 1429.652278100 | 14.96 s | 248 | 4,171 | 30.00 s | timed out, incumbent 1531 |
+| eil33/Q4000, tied-batch GLM 2 s | 1428.470116448 | 10.10 s | 254 | 1,493 | 15.00 s | timed out, incumbent 1531 |
+| eil33/Q4000, tied-batch GLM 10 s | 1430.386693394 | 15.96 s | 270 | 3,502 | 30.00 s | timed out, incumbent 1531 |
+| eil51, heuristic comb 10 s + tied-batch GLM 10 s | 516.379310328 | 23.22 s | 195 | 885 | 33.84 s | optimal |
+
+GLM produced no material root-bound gain on `eil51`, either alone or after the heuristic comb separator. On the
+higher-vehicle rounded `eil33` formulation, the strongest single run raised the bound by about 3.22. Tied batching did
+not improve the two-second result, but did improve the ten-second result over the one-cut prototype. That is a useful
+polyhedral-strength signal, not proof of a stable batching advantage: the different timeouts, single trials, and this
+solver's large run-to-run variation make the bound, node, and total-time differences unsuitable for performance claims.
+
+A later `eilD76_k4` spot check used capacity 360, depth-5 node RCC, and 60-second budgets for both heuristic comb and
+GLM separation. The comb heuristic found 87 cuts and reached a rounded root bound of 588; the exact GLM separator then
+finished in 8 milliseconds without finding a cut. Thus GLM provided no incremental strengthening of that post-comb
+relaxation.

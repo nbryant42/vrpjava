@@ -9,6 +9,7 @@ exact branch-and-cut solver based on the 2-index Vehicle Flow Formulation and th
 
 * https://repub.eur.nl/pub/135594/EI2021-01.pdf
 * https://onlinelibrary.wiley.com/doi/10.1002/net.22183
+* https://www.lancaster.ac.uk/staff/letchfoa/articles/2002-multistar.pdf
 
 The remainder of this discussion will mostly focus on the exact solver.
 
@@ -56,14 +57,18 @@ Look under Project Reports.
 The algorithm first iterates on the RCC-Sep procedure (which is itself NP-hard) until it's no longer possible to
 generate additional cuts. It then applies inexpensive connectivity separation: all disconnected customer components
 are cut at once, or, when the support graph is connected, one exact Stoer-Wagner global minimum cut is tested. A
-violated subset is strengthened to the rounded-capacity cut for its actual demand. The solver then proceeds with a
-parallel, best-first branch-and-cut search. At non-root nodes it also derives a rounded-capacity cut directly from any
-integer route that violates vehicle capacity; the full RCC-Sep ILP is reserved for tightening the root relaxation by
-default. `OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC separation through a selected branch depth and
-cap each separator call. It can also enable two experimental root-only comb separators: a support-graph heuristic for
-strengthened combs with disjoint teeth, and an exact MILP for restricted three-tooth 2-matching inequalities. These are
-performance controls only: optional separation may strengthen the relaxation, but candidate validation and exhaustive
-branching remain responsible for exactness.
+violated subset is strengthened to the rounded-capacity cut for its actual demand. The base model also fixes a
+customer-to-customer edge to zero when the two demands alone exceed vehicle capacity, since those customers cannot be
+consecutive on a feasible route. The solver then proceeds with a parallel, best-first branch-and-cut search. At
+non-root nodes it also derives a rounded-capacity cut directly from any integer route that violates vehicle capacity;
+the full RCC-Sep ILP is reserved for tightening the root relaxation by default.
+
+`OjAlgoCVRPSolver.ExperimentalParameters` can enable full RCC separation through a selected branch-depth interval and
+cap each separator call. It can also enable three experimental root-only separators: a support-graph heuristic for
+strengthened combs with disjoint teeth, exact generalized-large-multistar separation through a directed minimum cut,
+and an exact MILP for restricted three-tooth 2-matching inequalities. These are performance controls only: optional
+separation may strengthen the relaxation, but candidate validation and exhaustive branching remain responsible for
+exactness.
 
 There are also some tunable parameters that can be used to revert to a depth-first search. The idea is that for the
 hardest problem instances, we may not be able to solve to optimality, so the goal would be to merely generate an

@@ -20,6 +20,7 @@ class ExperimentalParametersTest {
         assertEquals(AUTO, parameters.searchStrategy());
         assertEquals(Long.MAX_VALUE, parameters.rccMillis());
         assertEquals(0L, parameters.heuristicCombMillis());
+        assertEquals(0L, parameters.multistarMillis());
         assertEquals(0L, parameters.threeToothMillis());
         assertFalse(parameters.useRccAtDepth(1));
         assertEquals(1234L, parameters.rccDeadline(1234L));
@@ -52,11 +53,21 @@ class ExperimentalParametersTest {
     }
 
     @Test
-    void previousThreeToothConstructorLeavesTheNewHeuristicDisabled() {
+    void previousThreeToothConstructorLeavesNewerSeparatorsDisabled() {
         var parameters = new ExperimentalParameters(AUTO, 1, 0, 1_000L, 2_000L, 0.85, 30_000L);
 
         assertEquals(0L, parameters.heuristicCombMillis());
+        assertEquals(0L, parameters.multistarMillis());
         assertEquals(2_000L, parameters.threeToothMillis());
+    }
+
+    @Test
+    void previousHeuristicCombConstructorLeavesMultistarDisabled() {
+        var parameters = new ExperimentalParameters(AUTO, 1, 0, 1_000L, 2_000L, 3_000L, 0.85, 30_000L);
+
+        assertEquals(2_000L, parameters.heuristicCombMillis());
+        assertEquals(0L, parameters.multistarMillis());
+        assertEquals(3_000L, parameters.threeToothMillis());
     }
 
     @Test
@@ -71,14 +82,16 @@ class ExperimentalParametersTest {
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new ExperimentalParameters(AUTO, 1, 0, -1L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0L, 0.85, 30_000L)),
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0L, 0L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, -1L, 0.85, 30_000L)),
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0L, -1L, 0L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0.0, 30_000L)),
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0L, 0L, -1L, 0.85, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 1.01, 30_000L)),
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0L, 0L, 0L, 0.0, 30_000L)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0.85, -1L)));
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0L, 0L, 0L, 1.01, 30_000L)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ExperimentalParameters(AUTO, 1, 0, 0L, 0L, 0L, 0L, 0.85, -1L)));
     }
 }

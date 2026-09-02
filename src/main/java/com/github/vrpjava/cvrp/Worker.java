@@ -187,6 +187,11 @@ final class Worker {
         var heuristicCombCuts = new HashSet<HeuristicCombCuts.Cut>();
         var heuristicCombStarted = false;
         var heuristicCombFinished = false;
+        var multistarEnabled = parameters.multistarMillis() > 0;
+        var multistarDeadline = 0L;
+        var multistarCuts = new HashSet<GeneralizedLargeMultistarCuts.Cut>();
+        var multistarStarted = false;
+        var multistarFinished = false;
         var threeToothEnabled = parameters.threeToothMillis() > 0;
         var threeToothDeadline = 0L;
         var threeToothCuts = new HashSet<ThreeToothCuts.Cut>();
@@ -247,6 +252,40 @@ final class Worker {
                 }
             }
 
+            if (multistarEnabled) {
+                if (multistarDeadline == 0L) {
+                    multistarDeadline = parameters.multistarDeadline(deadline);
+                    multistarStarted = true;
+                    progress.accept("Starting GLM separation");
+                }
+
+                var separation = GeneralizedLargeMultistarCuts.generate(vehicleCapacity, demands, result,
+                        multistarDeadline);
+                var added = 0;
+                for (var cut : separation.cuts()) {
+                    if (multistarCuts.add(cut)) {
+                        GeneralizedLargeMultistarCuts.addTo(model, cut, vehicleCapacity, demands);
+                        added++;
+                    }
+                }
+
+                if (separation.timedOut()) {
+                    multistarEnabled = false;
+                    multistarFinished = true;
+                    progress.accept("GLM separation found " + multistarCuts.size() + " cuts");
+                    progress.accept("GLM separation timed out.");
+                } else if (added == 0) {
+                    multistarEnabled = false;
+                    multistarFinished = true;
+                    progress.accept("GLM separation found " + multistarCuts.size() + " cuts");
+                }
+
+                if (added > 0) {
+                    result = minimize(model, deadline);
+                    continue;
+                }
+            }
+
             if (threeToothEnabled) {
                 if (threeToothDeadline == 0L) {
                     // The budget starts only after the configured RCI separators decline to add another cut, and is
@@ -287,6 +326,13 @@ final class Worker {
             progress.accept("Heuristic comb separation found " + heuristicCombCuts.size() + " cuts");
             if (System.currentTimeMillis() >= heuristicCombDeadline) {
                 progress.accept("Heuristic comb separation timed out.");
+            }
+        }
+
+        if (multistarStarted && !multistarFinished) {
+            progress.accept("GLM separation found " + multistarCuts.size() + " cuts");
+            if (System.currentTimeMillis() >= multistarDeadline) {
+                progress.accept("GLM separation timed out.");
             }
         }
 

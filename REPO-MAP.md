@@ -1,6 +1,6 @@
 # Repository map
 
-Last verified: 2026-08-19.
+Last verified: 2026-09-01.
 
 `vrpjava` is a Java 25 educational implementation of heuristic and exact vehicle-routing algorithms. It uses ojAlgo
 for mathematical optimization and intentionally exposes whether a result is heuristic, merely feasible, or proven
@@ -13,8 +13,9 @@ usage notes, performance observations, and the non-commercial license.
   `CVRPSolver.Result` with a `State`, objective, and set of routes.
 - `com.github.vrpjava.cvrp.OjAlgoCVRPSolver` is the exact symmetric CVRP facade. One instance owns a scheduler and worker
   threads, so callers should reuse it and close it (prefer try-with-resources).
-- `OjAlgoCVRPSolver.ExperimentalParameters` snapshots search strategy, node RCC depth, per-call RCC budget, separate
-  root-only heuristic-comb and exact-three-tooth budgets, and the automatic search thresholds for each job.
+- `OjAlgoCVRPSolver.ExperimentalParameters` snapshots search strategy, the node RCC depth interval, per-call RCC
+  budget, separate root-only heuristic-comb, generalized-large-multistar, and exact-three-tooth budgets, and the
+  automatic search thresholds for each job.
   `SolveStatistics` reports root bound/time/cuts and final nodes/cuts/time through a per-solve callback; it does not use
   shared "last run" state.
 - `ClarkeWrightCVRPSolver` and `NearestNeighborCVRPSolver` are CVRP heuristics. Clarke-Wright is the exact solver's
@@ -38,11 +39,14 @@ ATSP uses a full square cost matrix and returns an ordered list of directed `Edg
 
 1. `CVRPSolver.solve(...)` validates the problem and raises `minVehicles` to the simple capacity lower bound.
 2. `OjAlgoCVRPSolver.doSolve(...)` creates a `Job`.
-3. `Job` obtains a heuristic incumbent, builds the relaxed two-index vehicle-flow model, and tightens the root bound.
+3. `Job` obtains a heuristic incumbent, builds the relaxed two-index vehicle-flow model, fixes customer edges whose
+   endpoint demands exceed vehicle capacity, and tightens the root bound.
 4. `Worker.updateBounds(...)` alternates ojAlgo solves with rounded-capacity cuts from `RccSepCVRPCuts` and cheaper
    connectivity cuts from `SubtourCuts`. When explicitly enabled, `HeuristicCombCuts` then searches support-graph
-   handles, greedy odd crossing matchings, and greedily enlarged disjoint teeth. `ThreeToothCuts` is the final optional
-   fallback and adds one exact restricted 2-matching inequality. Any new cut returns the loop to RCC separation.
+   handles, greedy odd crossing matchings, and greedily enlarged disjoint teeth. `GeneralizedLargeMultistarCuts` is the
+   next optional fallback and uses one directed minimum cut to separate a canonical batch of equally strongest GLM
+   inequalities. `ThreeToothCuts` is the final optional fallback and adds one exact restricted 2-matching inequality.
+   Any new cut returns the loop to RCC separation.
 5. `Job.run()` queues the root node and registers it with the solver-owned `Scheduler`.
 6. `Scheduler` shares worker threads fairly across jobs. Each `Worker` copies the global model, fixes branch variables,
    solves and separates the node, then either resolves it, queues one child for every integer value in the selected
@@ -63,9 +67,16 @@ Supporting classes:
   rounded-capacity requirement.
 - `StoerWagnerMinimumCut`: package-private, dependency-free `O(|V|^3)` global minimum cut for nonnegative undirected
   `BigDecimal` graphs.
+- `DirectedMinimumCut`: package-private exact `BigDecimal` source-sink minimum cut implemented with Dinic's algorithm;
+  it supports the directed and antiparallel capacities used by GLM separation.
 - `HeuristicCombCuts`: optional root-only strengthened-comb heuristic. It takes candidate handles from components and
   biconnected blocks at fractional-support thresholds, builds several greedy odd-tooth matchings, and explores bounded
   greedy tooth-enlargement paths. Every emitted disjoint-tooth cut is independently checked before installation.
+- `GeneralizedLargeMultistarCuts`: optional root-only exact separator for generalized large multistar inequalities. Its
+  directed-minimum-cut reduction depends on the base model's valid zero bounds for customer pairs whose combined
+  demand exceeds capacity. Residual reachability extracts a linear-size canonical subset of tied minimum cuts without
+  another max-flow call. Crossing-edge coefficients use the demand of the endpoint outside the nucleus, and every
+  returned cut is independently evaluated before installation.
 - `ThreeToothCuts`: optional root-only exact MILP separator for three disjoint two-customer teeth. It is disabled by
   default, uses one total root budget, and independently validates a cut before adding it.
 - `Util`: matrix validation, model/deadline setup, variable construction, cost lookup, and optional hardware tuning.
@@ -80,6 +91,10 @@ Supporting classes:
   `StoerWagnerMinimumCutTest` compares the separator with exhaustive cuts on 175 deterministic tiny graphs.
 - `HeuristicCombCutsTest` covers support-block handle discovery, ordinary-comb generation, greedy high-demand tooth
   enlargement, expression installation, deadlines, and validity across every routing in a tiny exhaustive corpus.
+- `DirectedMinimumCutTest` checks random tiny directed graphs against exhaustive cuts and covers parallel and
+  antiparallel arcs. `GeneralizedLargeMultistarCutsTest` independently enumerates all nuclei, covers
+  capacity-incompatible pairs, and validates installed inequalities on every routing in a tiny exhaustive corpus;
+  `WorkerTest` checks batched root integration.
 - `BENCHMARKS.md`: benchmark properties, methodology cautions, and dated experimental observations.
 - `src/test/resources/com/github/vrpjava/large-problem.json`: larger fixture used by solver tests.
 

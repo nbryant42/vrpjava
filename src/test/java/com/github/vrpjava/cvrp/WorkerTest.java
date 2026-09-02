@@ -102,6 +102,28 @@ class WorkerTest {
                 progress);
     }
 
+    @Test
+    void optionalGlmSeparationTightensTheRootUpdate() {
+        var demands = new BigDecimal[]{ZERO, BigDecimal.valueOf(4), BigDecimal.valueOf(4),
+                BigDecimal.valueOf(4), BigDecimal.valueOf(4)};
+        var capacity = BigDecimal.TEN;
+        var deadline = Long.MAX_VALUE;
+        var disabled = new ExperimentalParameters(SearchStrategy.BEST_FIRST, 1, 0,
+                0L, 0L, 0L, 0L, 0.85, 30_000L);
+        var enabled = new ExperimentalParameters(SearchStrategy.BEST_FIRST, 1, 0,
+                0L, 0L, 10_000L, 0L, 0.85, 30_000L);
+        var progress = new ArrayList<String>();
+
+        var withoutMultistar = Worker.updateBounds(capacity, demands, violatedMultistarModel(), null, deadline,
+                disabled);
+        var withMultistar = Worker.updateBounds(capacity, demands, violatedMultistarModel(), null, deadline, enabled,
+                progress::add);
+
+        assertTrue(withoutMultistar.getState().isOptimal());
+        assertEquals(INFEASIBLE, withMultistar.getState());
+        assertEquals(List.of("Starting GLM separation", "GLM separation found 3 cuts"), progress);
+    }
+
     private static ExpressionsBasedModel violatedThreeToothModel() {
         var edges = new double[7][7];
         edge(edges, 1, 2, 0.5);
@@ -113,6 +135,23 @@ class WorkerTest {
         edge(edges, 0, 4, 1.0);
         edge(edges, 0, 5, 1.0);
         edge(edges, 0, 6, 1.0);
+
+        var model = new ExpressionsBasedModel();
+        for (var row = 1; row < edges.length; row++) {
+            for (var col = 0; col < row; col++) {
+                model.newVariable("x" + row + "_" + col).level(edges[row][col]);
+            }
+        }
+        return model;
+    }
+
+    private static ExpressionsBasedModel violatedMultistarModel() {
+        var edges = new double[5][5];
+        edge(edges, 0, 3, 1.0);
+        edge(edges, 3, 1, 1.0);
+        edge(edges, 1, 2, 1.0);
+        edge(edges, 2, 4, 1.0);
+        edge(edges, 4, 0, 1.0);
 
         var model = new ExpressionsBasedModel();
         for (var row = 1; row < edges.length; row++) {

@@ -124,7 +124,7 @@ class Job {
                                            ExperimentalParameters parameters,
                                            Consumer<String> progress) {
         var model = newModel(deadline);
-        var vars = buildVars(costMatrix, model);
+        var vars = buildVars(vehicleCapacity, demands, costMatrix, model);
 
         buildConstraints(model, minVehicles, vars);
         model.relax();

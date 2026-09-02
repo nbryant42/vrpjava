@@ -365,15 +365,19 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
     /**
      * Opt-in experiment harness. Run with {@code -Dvrp.benchmark=eil33} and optionally set:
-     * {@code vrp.trials}, {@code vrp.timeoutMillis}, {@code vrp.searchStrategy}, {@code vrp.rccDepth},
-     * {@code vrp.rccMillis}, {@code vrp.heuristicCombMillis}, {@code vrp.threeToothMillis},
+     * {@code vrp.trials}, {@code vrp.timeoutMillis}, {@code vrp.searchStrategy},
+     * {@code vrp.rccMinNodeDepth}, {@code vrp.rccDepth}, {@code vrp.rccMillis},
+     * {@code vrp.heuristicCombMillis}, {@code vrp.multistarMillis},
+     * {@code vrp.threeToothMillis}, {@code vrp.capacity}, {@code vrp.roundCosts},
      * {@code vrp.bestFirstRatio}, and {@code vrp.bestFirstMillis}.
      */
     @Test
     @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil33|all")
     void benchmarkEil33() throws IOException {
-        runBenchmark("eil33", 300_000L, (solver, timeout) ->
-                (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, 8000, solver));
+        var capacity = Integer.getInteger("vrp.capacity", 8000);
+        var roundCosts = Boolean.getBoolean("vrp.roundCosts");
+        runBenchmark("eil33", capacity, roundCosts, 300_000L, (solver, timeout) ->
+                (Result) doTestEil33(Integer.MAX_VALUE, false, timeout, capacity, solver, roundCosts));
     }
 
     /**
@@ -382,10 +386,16 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
     @Test
     @EnabledIfSystemProperty(named = "vrp.benchmark", matches = "eil51|all")
     void benchmarkEil51() throws IOException {
-        runBenchmark("eil51", 300_000L, (solver, timeout) -> doTestEil51(solver, timeout, 160));
+        var capacity = Integer.getInteger("vrp.capacity", 160);
+        runBenchmark("eil51", capacity, true, 300_000L,
+                (solver, timeout) -> doTestEil51(solver, timeout, capacity));
     }
 
-    private void runBenchmark(String instance, long defaultTimeout, BenchmarkSolve solve) throws IOException {
+    private void runBenchmark(String instance,
+                              int capacity,
+                              boolean roundCosts,
+                              long defaultTimeout,
+                              BenchmarkSolve solve) throws IOException {
         var defaults = ExperimentalParameters.defaults();
         var parameters = new ExperimentalParameters(
                 SearchStrategy.valueOf(System.getProperty("vrp.searchStrategy",
@@ -394,6 +404,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
                 Integer.getInteger("vrp.rccDepth", defaults.maxRccDepth()),
                 Long.getLong("vrp.rccMillis", defaults.rccMillis()),
                 Long.getLong("vrp.heuristicCombMillis", defaults.heuristicCombMillis()),
+                Long.getLong("vrp.multistarMillis", defaults.multistarMillis()),
                 Long.getLong("vrp.threeToothMillis", defaults.threeToothMillis()),
                 Double.parseDouble(System.getProperty("vrp.bestFirstRatio",
                         Double.toString(defaults.bestFirstRatio()))),
@@ -404,8 +415,9 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             throw new IllegalArgumentException("vrp.trials must be positive.");
         }
 
-        System.out.println("instance,trial,strategy,rccDepth,rccMillis,heuristicCombMillis,threeToothMillis," +
-                "rootState,rootBound,rootMillis,rootCuts,nodes,cuts,elapsedMillis,resultState,objective");
+        System.out.println("instance,capacity,roundCosts,trial,strategy,rccMinNodeDepth,rccDepth,rccMillis," +
+                "heuristicCombMillis,multistarMillis,threeToothMillis,rootState,rootBound,rootMillis,rootCuts," +
+                "nodes,cuts,elapsedMillis,resultState,objective");
         for (var trial = 1; trial <= trials; trial++) {
             var statistics = new AtomicReference<OjAlgoCVRPSolver.SolveStatistics>();
             Result result;
@@ -418,11 +430,12 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
             var stats = statistics.get();
             assertNotNull(stats);
             System.out.printf(Locale.ROOT,
-                    "%s,%d,%s,%d,%d,%d,%d,%s,%.12f,%d,%d,%d,%d,%d,%s,%.12f%n",
-                    instance, trial, parameters.searchStrategy(), parameters.maxRccDepth(), parameters.rccMillis(),
-                    parameters.heuristicCombMillis(), parameters.threeToothMillis(), stats.rootState(),
-                    stats.rootBound(), stats.rootMillis(), stats.rootCuts(), stats.nodes(), stats.cuts(),
-                    stats.elapsedMillis(), result.state(), result.objective());
+                    "%s,%d,%s,%d,%s,%d,%d,%d,%d,%d,%d,%s,%.12f,%d,%d,%d,%d,%d,%s,%.12f%n",
+                    instance, capacity, roundCosts, trial, parameters.searchStrategy(),
+                    parameters.minNodeRccDepth(), parameters.maxRccDepth(), parameters.rccMillis(),
+                    parameters.heuristicCombMillis(), parameters.multistarMillis(), parameters.threeToothMillis(),
+                    stats.rootState(), stats.rootBound(), stats.rootMillis(), stats.rootCuts(), stats.nodes(),
+                    stats.cuts(), stats.elapsedMillis(), result.state(), result.objective());
         }
     }
 
@@ -531,8 +544,8 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
 
         try (var solver = newSolver()) {
             solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 5,
-                    5, Long.MAX_VALUE, 60_000L, 0L, 0.85,
-                    120_000L));
+                    5, Long.MAX_VALUE, 60_000L, 60_000L,
+                    0L, 0.85, 120_000L));
 
             var result = doTestEilD76(solver, timeout, 360);
 
