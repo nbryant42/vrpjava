@@ -56,7 +56,7 @@ Short imperative header
 Explain what changed and why, with a little more detail. Mention important
 correctness implications and verification when relevant.
 
-Co-authored-by: Codex (GPT-5.6 Sol) <codex@openai.com>
+Co-authored-by: Codex (GPT-6 Astra) <codex@openai.com>
 ```
 
 Keep the header concise. Wrap body paragraphs at no more than 80 columns.

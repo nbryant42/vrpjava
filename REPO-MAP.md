@@ -20,6 +20,9 @@ usage notes, performance observations, and the non-commercial license.
   shared "last run" state.
 - `ClarkeWrightCVRPSolver` and `NearestNeighborCVRPSolver` are CVRP heuristics. Clarke-Wright is the exact solver's
   default incumbent generator and is replaceable through `setHeuristic(...)`.
+- `FixedSolutionCVRPSolver` supplies an immutable snapshot of configured routes through the same heuristic API.
+  Each solve validates customer coverage, depot placement, capacity and minimum route count, then recomputes cost.
+  Invalid seeds throw before the exact solver can use their objective as an upper bound.
 - `com.github.vrpjava.atsp.ATSPSolver` is the ATSP base API and also contains a nearest-neighbor heuristic.
 - `com.github.vrpjava.atsp.OjAlgoATSPSolver` is the ojAlgo assignment-plus-subtour-cut implementation.
 

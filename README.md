@@ -103,6 +103,17 @@ This solver starts with a configurable heuristic to define the current best-know
 the Clarke-Wright algorithm, but if you have some code that performs better than the default, a plugin interface is
 available.)
 
+To start from previously found routes, configure a fixed solution:
+
+```java
+solver.setHeuristic(new FixedSolutionCVRPSolver(knownRoutes));
+```
+
+`knownRoutes` is a collection of customer-index lists, each starting with depot `0` and omitting the closing depot.
+The adapter copies the routes, validates coverage, capacity and minimum route count on every solve, and computes
+their objective from the supplied cost matrix. Invalid routes throw `IllegalArgumentException`; valid routes are
+reported as `HEURISTIC` until the exact solver proves optimality.
+
 It will then search for a better solution, skipping parts of the search tree which provably cannot be better than
 the current best known solution, until it hits whatever timeout you have set, or it has found the provably optimal
 solution. If it hits the timeout first, it may still have found a better solution. So in a sense, it is both exact and

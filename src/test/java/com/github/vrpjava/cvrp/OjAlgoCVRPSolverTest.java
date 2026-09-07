@@ -496,7 +496,7 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         }
     }
 
-    // I think this is probably the same as the P-n76-k4 from Lysgaard et al.
+    // This is the same as the P-n76-k4 from Lysgaard et al., except that we solve for >=4 vehicles (they use == 4)
     // They report root bound 589.097, we get a worse bound and time out, but we're sometimes able to find the published
     // optimum (just not prove its optimality within the 30-minute timeout):
     //[30.611s]: Starting heuristic comb separation
@@ -543,11 +543,17 @@ class OjAlgoCVRPSolverTest extends AbstractCVRPSolverTest {
         var timeout = 1800_000L;
 
         try (var solver = newSolver()) {
+            // Previously found cost-593 solution, feasible with Q=350; seed the search, not an optimality claim.
+            solver.setHeuristic(new FixedSolutionCVRPSolver(List.of(
+                    List.of(0, 46, 8, 19, 54, 13, 57, 15, 37, 20, 70, 60, 71, 69, 36, 47, 5, 29, 45, 27, 52, 34, 67),
+                    List.of(0, 17, 40, 12, 72, 58, 10, 38, 65, 11, 66, 59, 14, 53, 35, 7, 26),
+                    List.of(0, 4, 30, 48, 21, 61, 22, 64, 42, 41, 43, 1, 73, 62, 28, 74, 2, 68, 75),
+                    List.of(0, 6, 33, 63, 23, 56, 49, 24, 18, 50, 25, 55, 31, 39, 9, 32, 44, 3, 16, 51))));
             solver.setExperimentalParameters(new ExperimentalParameters(SearchStrategy.AUTO, 5,
                     5, Long.MAX_VALUE, 60_000L, 60_000L,
                     0L, 0.85, 120_000L));
 
-            var result = doTestEilD76(solver, timeout, 360);
+            var result = doTestEilD76(solver, timeout, 350);
 
             assertEquals(593.0, result.objective());
             assertEquals(OPTIMAL, result.state());
