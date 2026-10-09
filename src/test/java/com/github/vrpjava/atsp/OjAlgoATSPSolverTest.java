@@ -137,7 +137,10 @@ class OjAlgoATSPSolverTest {
     @Test
     @Disabled
     void staticLargeProblem() throws IOException {
-        var problem = toCostMatrix(mapper.readValue(getClass().getResource("large-problem.json"), List.class));
+        BigDecimal[][] problem;
+        try (var input = getClass().getResourceAsStream("/com/github/vrpjava/large-problem.json")) {
+            problem = toCostMatrix(mapper.readValue(input, List.class));
+        }
 
         var start = System.currentTimeMillis();
         new OjAlgoATSPSolver().solve(problem, 10_000L);

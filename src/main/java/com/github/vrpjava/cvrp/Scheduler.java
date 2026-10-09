@@ -62,7 +62,7 @@ class Scheduler implements AutoCloseable {
                             outcome = nodeProcessor.process(job, node);
                         } catch (RuntimeException | Error failure) {
                             job.reportFailure(failure);
-                            if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
+                            if (failure instanceof VirtualMachineError) {
                                 throw failure;
                             }
                         } finally {
